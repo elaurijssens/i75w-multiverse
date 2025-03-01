@@ -1,0 +1,7 @@
+#ifndef BUILDINFO_H
+#define BUIDLINFO_H
+
+#define BOARD_NAME "@NAME@"
+#define BUILD_NUMBER "@BUILD_NUMBER@"
+#define PICO_PLATFORM "@PICO_PLATFORM@"
+#endif // BUILDINFO_H
