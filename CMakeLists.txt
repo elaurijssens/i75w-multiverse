@@ -4,13 +4,13 @@ cmake_minimum_required(VERSION 3.12)
 set(MULTIVERSE_BOARD i75w)
 
 
-if(DEFINED ENV{PICO_BOARD})
+if (DEFINED ENV{PICO_BOARD})
     set(PICO_BOARD $ENV{PICO_BOARD})
-endif()
+endif ()
 
-if(DEFINED ENV{PICO_PLATFORM})
+if (DEFINED ENV{PICO_PLATFORM})
     set(PICO_PLATFORM $ENV{PICO_PLATFORM})
-endif()
+endif ()
 
 set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/src/boards)
 #set(PICO_BOARD_CMAKE_DIRS ${CMAKE_CURRENT_LIST_DIR}/src/boards)
@@ -38,20 +38,20 @@ set(SRC_DIR ${CMAKE_CURRENT_LIST_DIR}/src)
 
 # Add your source files
 add_executable(${NAME}
-    ${SRC_DIR}/main.cpp
-    ${SRC_DIR}/cdc_uart.cpp
-    ${SRC_DIR}/get_serial.cpp
-    ${SRC_DIR}/usb_descriptors.cpp
+        ${SRC_DIR}/main.cpp
+        ${SRC_DIR}/cdc_uart.cpp
+        ${SRC_DIR}/get_serial.cpp
+        ${SRC_DIR}/usb_descriptors.cpp
 )
 
 target_include_directories(
-    ${NAME} PRIVATE
-    ${SRC_DIR}
+        ${NAME} PRIVATE
+        ${SRC_DIR}
 )
 
 target_compile_definitions(
-    ${NAME} PRIVATE
-    MULTIVERSE_BOARD="${MULTIVERSE_BOARD}"
+        ${NAME} PRIVATE
+        MULTIVERSE_BOARD="${MULTIVERSE_BOARD}"
 )
 
 include(${DISPLAY_PATH})
@@ -59,21 +59,23 @@ include(${DISPLAY_PATH})
 #include(${WIFI_PATH})
 
 add_subdirectory(src/tcp_server)
+add_subdirectory(src/config_storage)
 
 # Don't forget to link the libraries you need!
 target_link_libraries(${NAME}
-    display
-    zlib
+        display
+        zlib
 
-    pico_stdlib
-    pico_unique_id
-    hardware_pio
-    hardware_watchdog
+        pico_stdlib
+        pico_unique_id
+        hardware_pio
+        hardware_watchdog
 
-    tinyusb_device
-    tinyusb_board
+        tinyusb_device
+        tinyusb_board
 
-    tcp_server
+        tcp_server
+        config_storage
 )
 
 # create map/bin/hex file etc.
@@ -81,10 +83,10 @@ pico_add_extra_outputs(${NAME})
 
 # Set up files for the release packages
 install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/${NAME}.uf2
-    ${CMAKE_CURRENT_LIST_DIR}/README.md
-    ${CMAKE_CURRENT_LIST_DIR}/LICENSE
-    DESTINATION .
+        ${CMAKE_CURRENT_BINARY_DIR}/${NAME}.uf2
+        ${CMAKE_CURRENT_LIST_DIR}/README.md
+        ${CMAKE_CURRENT_LIST_DIR}/LICENSE
+        DESTINATION .
 )
 
 set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)

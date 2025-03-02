@@ -35,6 +35,7 @@
 #include "pico/timeout_helper.h"
 #include "zlib.h"
 #include "tcp_server/tcp_server.hpp"
+#include "config_storage/config_storage.hpp"
 
 #include "bsp/board.h"
 #include "tusb.h"
@@ -48,10 +49,14 @@
 using namespace pimoroni;
 
 const size_t COMMAND_LEN = 4;
+const size_t CONFIG_KEY_LEN = 16;
+const size_t CONFIG_VALUE_LEN = 128;
 uint8_t command_buffer[COMMAND_LEN];
+uint8_t config_key_buffer[CONFIG_KEY_LEN];
+uint8_t config_value_buffer[CONFIG_VALUE_LEN];
+
 std::string_view command((const char *)command_buffer, COMMAND_LEN);
 
-//uint16_t audio_buffer[22050] = {0};
 
 bool cdc_wait_for(std::string_view data, uint timeout_ms=1000) {
     timeout_state ts;
@@ -103,19 +108,63 @@ uint8_t cdc_get_data_uint8() {
     return len;
 }
 
+size_t cdc_get_until(uint8_t *buffer, size_t max_len, uint8_t separator, uint8_t escape, uint timeout_ms = 1000) {
+    size_t index = 0;
+    bool escaped = false;
+
+    timeout_state ts;
+    absolute_time_t until = delayed_by_ms(get_absolute_time(), timeout_ms);
+    check_timeout_fn check_timeout = init_single_timeout_until(&ts, until);
+
+    while (index < max_len - 1 && !check_timeout(&ts, until)) {
+        tud_task(); // TinyUSB device task
+
+        uint8_t byte;
+        if (cdc_get_bytes(&byte, 1) == 0) {
+            continue; // No data available, retry until timeout
+        }
+
+        if (escaped) {
+            // Store the byte literally if it was escaped
+            escaped = false;
+        } else if (byte == escape) {
+            // If escape character is found, set flag and continue to next byte
+            escaped = true;
+            continue;
+        } else if (byte == separator) {
+            // End of field reached
+            break;
+        }
+
+        // Store the byte in the buffer
+        buffer[index++] = byte;
+    }
+
+    buffer[index] = '\0'; // Null-terminate the string
+    return index;
+}
+
 void handle_data(const std::string& data) {
     display::info("$> " + data);
 }
 
-int main(void) {
+int main() {
     board_init(); // Wtf?
     usb_serial_init(); // ??
     //cdc_uart_init(); // From cdc_uart.c
     tusb_init(); // Tiny USB?
 
+    std::unordered_map<std::string, std::string> defaults = {
+        {"ssid", "MyNetwork"},
+        {"pass", "DefaultPass"},
+        {"port", "8080"}
+    };
+
+    KVStore kvStore(defaults);
+
     display::init();
 
-    TcpServer server("redacted", "redacted", 23456);
+    TcpServer server(kvStore.getParam("ssid"), kvStore.getParam("pass"),std::stoi(kvStore.getParam("port")));
     server.set_data_callback(handle_data);
 
     if (!server.start()) {
@@ -140,6 +189,22 @@ int main(void) {
             if (cdc_get_bytes(display::buffer, display::BUFFER_SIZE) == display::BUFFER_SIZE) {
                 display::update();
             }
+            continue;
+        }
+
+        if(command == "parm") {
+            if (cdc_get_until(config_key_buffer, CONFIG_KEY_LEN, ':', '\\')) {
+                if (cdc_get_until(config_value_buffer, CONFIG_VALUE_LEN, ':', '\\')) {
+                    kvStore.setParam(config_key_buffer, CONFIG_KEY_LEN, config_value_buffer, CONFIG_VALUE_LEN);
+
+                }
+            }
+
+            continue;
+        }
+
+        if(command=="stor") {
+            kvStore.commitToFlash();
             continue;
         }
 
