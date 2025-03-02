@@ -150,9 +150,6 @@ void handle_data(const std::string& data) {
 
 int main() {
     board_init(); // Wtf?
-    usb_serial_init(); // ??
-    //cdc_uart_init(); // From cdc_uart.c
-    tusb_init(); // Tiny USB?
 
     std::unordered_map<std::string, std::string> defaults = {
         {"ssid", "MyNetwork"},
@@ -162,15 +159,23 @@ int main() {
 
     KVStore kvStore(defaults);
 
+    size_t actual_key_length;
+    size_t actual_value_length;
+
     display::init();
 
     TcpServer server(kvStore.getParam("ssid"), kvStore.getParam("pass"),std::stoi(kvStore.getParam("port")));
     server.set_data_callback(handle_data);
 
     if (!server.start()) {
-        display::info("Failed to start server");
+        display::info("Failed to start TCP server");
+    } else {
+        display::info("TCP server started on " + server.ipv4addr() + ":" + kvStore.getParam("port"));
     }
 
+    usb_serial_init(); // ??
+    //cdc_uart_init(); // From cdc_uart.c
+    tusb_init(); // Tiny USB?
 
     while (1) {
         tud_task();
@@ -181,7 +186,6 @@ int main() {
         }
 
         if(cdc_get_bytes(command_buffer, COMMAND_LEN) != COMMAND_LEN) {
-            //display::info("cto");
             continue;
         }
 
@@ -192,19 +196,62 @@ int main() {
             continue;
         }
 
-        if(command == "parm") {
-            if (cdc_get_until(config_key_buffer, CONFIG_KEY_LEN, ':', '\\')) {
-                if (cdc_get_until(config_value_buffer, CONFIG_VALUE_LEN, ':', '\\')) {
-                    kvStore.setParam(config_key_buffer, CONFIG_KEY_LEN, config_value_buffer, CONFIG_VALUE_LEN);
+        if(command == "set:") {
 
+            actual_key_length = cdc_get_until(config_key_buffer, CONFIG_KEY_LEN, ':', '\\');
+            if (actual_key_length > 0) {
+                actual_value_length = cdc_get_until(config_value_buffer, CONFIG_VALUE_LEN, ':', '\\');
+                if (actual_value_length > 0) {
+                    if (kvStore.setParam(config_key_buffer, actual_key_length, config_value_buffer, actual_value_length) ) {
+                        display::info("Key "+arrayToString(config_key_buffer, actual_key_length)+" set to "+kvStore.getParam(config_key_buffer, actual_key_length));
+                    } else {
+                        display::info("Failed to set key "+arrayToString(config_key_buffer, actual_key_length)+" to "+arrayToString(config_value_buffer, actual_value_length));
+                    }
+                } else {
+                    display::info("Key "+arrayToString(config_key_buffer, actual_key_length)+" received but no value");
+                }
+            } else {
+                display::info("No valid data received");
+            }
+            continue;
+        }
+
+        if(command == "get:") {
+            actual_key_length = cdc_get_until(config_key_buffer, CONFIG_KEY_LEN, ':', '\\');
+            if (actual_key_length > 0) {
+                display::info(arrayToString(config_key_buffer, actual_key_length) + " = " + kvStore.getParam(config_key_buffer, actual_key_length) );
+            }
+            continue;
+        }
+
+        if(command == "del:") {
+            actual_key_length = cdc_get_until(config_key_buffer, CONFIG_KEY_LEN, ':', '\\');
+            if (actual_key_length > 0) {
+                if (kvStore.deleteParam(config_key_buffer, actual_key_length)) {
+                    display::info("Key " + arrayToString(config_key_buffer, actual_key_length) + " deleted");
+                } else {
+                    display::info("Key " + arrayToString(config_key_buffer, actual_key_length) + " does not exist");
                 }
             }
+            continue;
+        }
 
+        if(command=="ipv4") {
+            display::info(server.ipv4addr());
+            continue;
+        }
+
+        if(command=="ipv6") {
+            display::info(server.ipv6addr());
             continue;
         }
 
         if(command=="stor") {
-            kvStore.commitToFlash();
+            if (kvStore.commitToFlash()) {
+                display::info("Config written to flash");
+            } else {
+                display::info("Flash already up to date");
+            }
             continue;
         }
 

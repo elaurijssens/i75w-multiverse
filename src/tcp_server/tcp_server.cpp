@@ -32,6 +32,27 @@ void TcpServer::stop() {
     }
 }
 
+std::string TcpServer::ipv4addr() {
+    const ip_addr *ip = &netif_list->ip_addr;
+    return std::string(ipaddr_ntoa(ip));
+}
+
+std::string TcpServer::ipv6addr() {
+    std::string ipv6_addresses;
+
+    for (int i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
+        if (netif_list->ip6_addr_state[i]) { // Check if IPv6 address is valid
+            if (!ipv6_addresses.empty()) {
+                ipv6_addresses += "\n";  // Add newline separator
+            }
+            ip_addr *ip = &netif_list->ip6_addr[i];
+            ipv6_addresses += std::string(ipaddr_ntoa(ip));
+        }
+    }
+
+    return ipv6_addresses.empty() ? "No IPv6 address assigned" : ipv6_addresses;
+}
+
 void TcpServer::set_data_callback(DataCallback callback) {
     data_callback = std::move(callback);
 }
@@ -46,13 +67,22 @@ bool TcpServer::connect_wifi() {
     cyw43_arch_enable_sta_mode();
     display::info("Connecting to Wi-Fi: " + ssid);
 
-    if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), CYW43_AUTH_WPA2_AES_PSK, 30000)) {
-        display::info("Wi-Fi connection failed\n");
-        return false;
+    const uint32_t auth_modes[] = {
+        CYW43_AUTH_WPA3_SAE_AES_PSK,    // WPA3
+        CYW43_AUTH_WPA3_WPA2_AES_PSK,
+        CYW43_AUTH_WPA2_MIXED_PSK,  // WPA2/WPA3 Mixed Mode
+        CYW43_AUTH_WPA2_AES_PSK     // WPA2
+    };
+
+    for (uint32_t auth_mode : auth_modes) {
+
+        if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), auth_mode, 10000) == 0) {
+            return true;
+        }
     }
 
-    display::info("Connected to Wi-Fi\n");
-    return true;
+    display::info("Unable to connect to Wi-Fi\n");
+    return false;
 }
 
 void TcpServer::run() {
@@ -82,10 +112,6 @@ void TcpServer::run() {
     tcp_arg(server_pcb, this);
     tcp_accept(server_pcb, on_accept);
     cyw43_arch_lwip_end();
-
-    const ip4_addr_t *ip = &netif_list->ip_addr;
-
-    display::info("TCP server listening on ip:port " + std::string(ip4addr_ntoa(ip)) + ":" + std::to_string(port));
 }
 
 err_t TcpServer::on_accept(void *arg, struct tcp_pcb *newpcb, err_t err) {

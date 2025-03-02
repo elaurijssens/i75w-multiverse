@@ -4,6 +4,8 @@
 #include <string>
 #include <functional>
 #include "lwip/tcp.h"
+#include "lwip/err.h"
+#include "lwipopts.h"
 
 class TcpServer {
 public:
@@ -14,6 +16,8 @@ public:
 
     bool start();
     void stop();
+    std::string ipv4addr();
+    std::string ipv6addr();
     void set_data_callback(DataCallback callback);
 
 private:

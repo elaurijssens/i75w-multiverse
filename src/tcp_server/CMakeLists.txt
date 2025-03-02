@@ -9,3 +9,4 @@ target_link_libraries(
         display
         pico_cyw43_arch_lwip_threadsafe_background
 )
+#add_compile_definitions(LWIP_IPV6=1)
