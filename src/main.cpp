@@ -34,6 +34,7 @@
 #include "hardware/watchdog.h"
 #include "pico/timeout_helper.h"
 #include "zlib.h"
+#include "tcp_server/tcp_server.hpp"
 
 #include "bsp/board.h"
 #include "tusb.h"
@@ -102,6 +103,10 @@ uint8_t cdc_get_data_uint8() {
     return len;
 }
 
+void handle_data(const std::string& data) {
+    display::info("$> " + data);
+}
+
 int main(void) {
     board_init(); // Wtf?
     usb_serial_init(); // ??
@@ -109,6 +114,14 @@ int main(void) {
     tusb_init(); // Tiny USB?
 
     display::init();
+
+    TcpServer server("redacted", "redacted", 23456);
+    server.set_data_callback(handle_data);
+
+    if (!server.start()) {
+        display::info("Failed to start server");
+    }
+
 
     while (1) {
         tud_task();
@@ -182,31 +195,6 @@ int main(void) {
             display::update();
 
             continue;
-        }
-
-        /*if(command == "wave") {
-            uint16_t audio_len = cdc_get_data_uint16();
-            if (cdc_get_bytes((uint8_t *)audio_buffer, audio_len) == audio_len) {
-                display::play_audio((uint8_t *)audio_buffer, audio_len / 2);
-            }
-            continue;
-        }*/
-
-        if(command == "note") {
-            uint8_t channel = cdc_get_data_uint8();
-            uint16_t freq = cdc_get_data_uint16();
-
-            uint8_t waveform = cdc_get_data_uint8();
-
-            uint16_t a = cdc_get_data_uint16();
-            uint16_t d = cdc_get_data_uint16();
-            uint16_t s = cdc_get_data_uint16();
-            uint16_t r = cdc_get_data_uint16();
-
-            uint8_t phase = cdc_get_data_uint8();
-
-            display::play_note(channel, freq, waveform, a, d, s, r, phase);
-            //display::info("note");
         }
 
         if(command == "_rst") {

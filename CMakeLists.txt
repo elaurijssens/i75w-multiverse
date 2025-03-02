@@ -17,7 +17,7 @@ set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/src/boards)
 
 set(NAME ${MULTIVERSE_BOARD}-ledmatrix)
 set(DISPLAY_PATH ${CMAKE_CURRENT_LIST_DIR}/src/display/${MULTIVERSE_BOARD}/${MULTIVERSE_BOARD}.cmake)
-
+set(WIFI_PATH ${CMAKE_CURRENT_LIST_DIR}/src/wifi/wifi.cmake)
 include(pimoroni_pico_import.cmake)
 include(pico_sdk_import.cmake)
 include(zlib_import.cmake)
@@ -56,6 +56,10 @@ target_compile_definitions(
 
 include(${DISPLAY_PATH})
 
+#include(${WIFI_PATH})
+
+add_subdirectory(src/tcp_server)
+
 # Don't forget to link the libraries you need!
 target_link_libraries(${NAME}
     display
@@ -68,6 +72,8 @@ target_link_libraries(${NAME}
 
     tinyusb_device
     tinyusb_board
+
+    tcp_server
 )
 
 # create map/bin/hex file etc.
@@ -78,10 +84,6 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/${NAME}.uf2
     ${CMAKE_CURRENT_LIST_DIR}/README.md
     ${CMAKE_CURRENT_LIST_DIR}/LICENSE
-#    ${CMAKE_CURRENT_LIST_DIR}/99-fire.rules
-#    ${CMAKE_CURRENT_LIST_DIR}/examples/multiverse.py
-#    ${CMAKE_CURRENT_LIST_DIR}/examples/multi_matrix.py
-#    ${CMAKE_CURRENT_LIST_DIR}/examples/multi_fire.py
     DESTINATION .
 )
 

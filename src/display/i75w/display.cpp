@@ -31,11 +31,4 @@ namespace display {
         hub75.update(&graphics);
     }
 
-    void play_note(uint8_t channel, uint16_t freq, uint8_t waveform, uint16_t a, uint16_t d, uint16_t s, uint16_t r, uint8_t phase) {
-        // No audio support on i75
-    }
-
-    void play_audio(uint8_t *audio_buffer, size_t len) {
-        // No audio support on i75
-    }
 }
