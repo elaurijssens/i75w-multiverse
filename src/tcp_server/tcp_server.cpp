@@ -14,11 +14,11 @@ TcpServer::~TcpServer() {
 
 bool TcpServer::start() {
     if (!connect_wifi()) {
-        display::info("Wi-Fi connection failed");
+        display::print("Wi-Fi connection failed");
         return false;
     }
 
-    display::info("Starting TCP server...");
+    display::print("Starting TCP server...");
 
     run();
     return true;
@@ -28,7 +28,7 @@ void TcpServer::stop() {
     if (server_pcb) {
         tcp_close(server_pcb);
         server_pcb = nullptr;
-        display::info("TCP server stopped");
+        display::print("TCP server stopped");
     }
 }
 
@@ -57,15 +57,19 @@ void TcpServer::set_data_callback(DataCallback callback) {
     data_callback = std::move(callback);
 }
 
+void TcpServer::set_binary_callback(BinaryCallback callback) {
+    binary_callback = callback;
+}
+
 bool TcpServer::connect_wifi() {
 
     if (cyw43_arch_init()) {
-        display::info("Failed to initialize Wi-Fi module");
+        display::print("Failed to initialize Wi-Fi module");
         return false;
     }
 
     cyw43_arch_enable_sta_mode();
-    display::info("Connecting to Wi-Fi: " + ssid);
+    display::print("Connecting to Wi-Fi: " + ssid);
 
     const uint32_t auth_modes[] = {
         CYW43_AUTH_WPA3_SAE_AES_PSK,    // WPA3
@@ -76,12 +80,12 @@ bool TcpServer::connect_wifi() {
 
     for (uint32_t auth_mode : auth_modes) {
 
-        if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), auth_mode, 10000) == 0) {
+        if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), auth_mode, 5000) == 0) {
             return true;
         }
     }
 
-    display::info("Unable to connect to Wi-Fi\n");
+    display::print("Unable to connect to Wi-Fi\n");
     return false;
 }
 
@@ -90,25 +94,26 @@ void TcpServer::run() {
     server_pcb = tcp_new();
 
     if (!server_pcb) {
-        display::info("Failed to create TCP server PCB\n");
+        display::print("Failed to create TCP server PCB");
         cyw43_arch_lwip_end();
         return;
     }
 
     err_t err = tcp_bind(server_pcb, IP_ADDR_ANY, port);
     if (err != ERR_OK) {
-        display::info("Failed to bind TCP server to port " + std::to_string(port));
+        display::print("Failed to bind TCP server to port " + std::to_string(port));
         cyw43_arch_lwip_end();
         return;
     }
 
     server_pcb = tcp_listen_with_backlog(server_pcb, 1);
     if (!server_pcb) {
-        display::info("Failed to listen on TCP server\n");
+        display::print("Failed to listen on TCP server");
         cyw43_arch_lwip_end();
         return;
     }
 
+    display::print("TCP server listening on port " + std::to_string(port));
     tcp_arg(server_pcb, this);
     tcp_accept(server_pcb, on_accept);
     cyw43_arch_lwip_end();
@@ -116,11 +121,12 @@ void TcpServer::run() {
 
 err_t TcpServer::on_accept(void *arg, struct tcp_pcb *newpcb, err_t err) {
     if (err != ERR_OK || !newpcb) {
+        display::print("TCP accept error");
         return ERR_VAL;
     }
 
     TcpServer *server = static_cast<TcpServer*>(arg);
-    display::info("New client connected\n");
+    display::print("Client connected");
 
     tcp_arg(newpcb, server);
     tcp_recv(newpcb, on_receive);
@@ -133,27 +139,28 @@ err_t TcpServer::on_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err
     TcpServer *server = static_cast<TcpServer*>(arg);
 
     if (!p) {
-        display::info("Client disconnected\n");
+        display::print("Client disconnected");
         on_close(tpcb);
         return ERR_OK;
     }
 
     std::string data((char*)p->payload, p->len);
-    display::info("Received data: " + data);
+    display::print("Received data len: " + std::to_string(p->len));
 
     if (server->data_callback) {
         server->data_callback(data);
     }
 
-    // tcp_write(tpcb, p->payload, p->len, TCP_WRITE_FLAG_COPY);
+    tcp_write(tpcb, p->payload, p->len, TCP_WRITE_FLAG_COPY);
     pbuf_free(p);
     return ERR_OK;
 }
 
 void TcpServer::on_error(void *arg, err_t err) {
-    display::info("TCP error:" + std::to_string(err));
+    display::print("TCP error: " + std::to_string(err));
 }
 
 void TcpServer::on_close(struct tcp_pcb *tpcb) {
+    display::print("Closing connection");
     tcp_close(tpcb);
 }

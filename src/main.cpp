@@ -144,8 +144,8 @@ size_t cdc_get_until(uint8_t *buffer, size_t max_len, uint8_t separator, uint8_t
     return index;
 }
 
-void handle_data(const std::string& data) {
-    display::info("$> " + data);
+void handle_binary_data(const std::vector<uint8_t>& data) {
+    display::info("Received" +std::to_string((int)data.size()) + " bytes of binary data");
 }
 
 int main() {
@@ -165,12 +165,12 @@ int main() {
     display::init();
 
     TcpServer server(kvStore.getParam("ssid"), kvStore.getParam("pass"),std::stoi(kvStore.getParam("port")));
-    server.set_data_callback(handle_data);
+    server.set_binary_callback(handle_binary_data);
 
     if (!server.start()) {
-        display::info("Failed to start TCP server");
+        display::print("Failed to start TCP server");
     } else {
-        display::info("TCP server started on " + server.ipv4addr() + ":" + kvStore.getParam("port"));
+        display::print("TCP server started on " + server.ipv4addr() + ":" + kvStore.getParam("port"));
     }
 
     usb_serial_init(); // ??
@@ -181,18 +181,11 @@ int main() {
         tud_task();
 
         if(!cdc_wait_for("multiverse:")) {
-            //display::info("mto");
+            //display::print("mto");
             continue; // Couldn't get 16 bytes of command
         }
 
         if(cdc_get_bytes(command_buffer, COMMAND_LEN) != COMMAND_LEN) {
-            continue;
-        }
-
-        if(command == "data") {
-            if (cdc_get_bytes(display::buffer, display::BUFFER_SIZE) == display::BUFFER_SIZE) {
-                display::update();
-            }
             continue;
         }
 
@@ -203,15 +196,15 @@ int main() {
                 actual_value_length = cdc_get_until(config_value_buffer, CONFIG_VALUE_LEN, ':', '\\');
                 if (actual_value_length > 0) {
                     if (kvStore.setParam(config_key_buffer, actual_key_length, config_value_buffer, actual_value_length) ) {
-                        display::info("Key "+arrayToString(config_key_buffer, actual_key_length)+" set to "+kvStore.getParam(config_key_buffer, actual_key_length));
+                        display::print("Key "+arrayToString(config_key_buffer, actual_key_length)+" set to "+kvStore.getParam(config_key_buffer, actual_key_length));
                     } else {
-                        display::info("Failed to set key "+arrayToString(config_key_buffer, actual_key_length)+" to "+arrayToString(config_value_buffer, actual_value_length));
+                        display::print("Failed to set key "+arrayToString(config_key_buffer, actual_key_length)+" to "+arrayToString(config_value_buffer, actual_value_length));
                     }
                 } else {
-                    display::info("Key "+arrayToString(config_key_buffer, actual_key_length)+" received but no value");
+                    display::print("Key "+arrayToString(config_key_buffer, actual_key_length)+" received but no value");
                 }
             } else {
-                display::info("No valid data received");
+                display::print("No valid data received");
             }
             continue;
         }
@@ -219,7 +212,7 @@ int main() {
         if(command == "get:") {
             actual_key_length = cdc_get_until(config_key_buffer, CONFIG_KEY_LEN, ':', '\\');
             if (actual_key_length > 0) {
-                display::info(arrayToString(config_key_buffer, actual_key_length) + " = " + kvStore.getParam(config_key_buffer, actual_key_length) );
+                display::print(arrayToString(config_key_buffer, actual_key_length) + " = " + kvStore.getParam(config_key_buffer, actual_key_length) );
             }
             continue;
         }
@@ -228,29 +221,36 @@ int main() {
             actual_key_length = cdc_get_until(config_key_buffer, CONFIG_KEY_LEN, ':', '\\');
             if (actual_key_length > 0) {
                 if (kvStore.deleteParam(config_key_buffer, actual_key_length)) {
-                    display::info("Key " + arrayToString(config_key_buffer, actual_key_length) + " deleted");
+                    display::print("Key " + arrayToString(config_key_buffer, actual_key_length) + " deleted");
                 } else {
-                    display::info("Key " + arrayToString(config_key_buffer, actual_key_length) + " does not exist");
+                    display::print("Key " + arrayToString(config_key_buffer, actual_key_length) + " does not exist");
                 }
             }
             continue;
         }
 
         if(command=="ipv4") {
-            display::info(server.ipv4addr());
+            display::print(server.ipv4addr());
             continue;
         }
 
         if(command=="ipv6") {
-            display::info(server.ipv6addr());
+            display::print(server.ipv6addr());
             continue;
         }
 
         if(command=="stor") {
             if (kvStore.commitToFlash()) {
-                display::info("Config written to flash");
+                display::print("Config written to flash");
             } else {
-                display::info("Flash already up to date");
+                display::print("Flash already up to date");
+            }
+            continue;
+        }
+
+        if(command == "data") {
+            if (cdc_get_bytes(display::buffer, display::BUFFER_SIZE) == display::BUFFER_SIZE) {
+                display::update();
             }
             continue;
         }
@@ -260,7 +260,7 @@ int main() {
             uint32_t compressed_size;
             if (cdc_get_bytes((uint8_t*)&compressed_size, sizeof(compressed_size)) != sizeof(compressed_size)) {
                 // Error handling: failed to read compressed size
-                display::info("nosize");
+                display::print("nosize");
                 continue;
             }
 
@@ -310,7 +310,7 @@ int main() {
         }
 
         if(command == "_rst") {
-            display::info("RST");
+            display::print("RST");
             sleep_ms(500);
             save_and_disable_interrupts();
             rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
@@ -319,7 +319,7 @@ int main() {
         }
 
         if(command == "_usb") {
-            display::info("USB");
+            display::print("USB");
             sleep_ms(500);
             save_and_disable_interrupts();
             rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
