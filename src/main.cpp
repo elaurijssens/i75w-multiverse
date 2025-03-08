@@ -145,7 +145,7 @@ size_t cdc_get_until(uint8_t *buffer, size_t max_len, uint8_t separator, uint8_t
 }
 
 void handle_binary_data(const std::vector<uint8_t>& data) {
-    display::info("Received" +std::to_string((int)data.size()) + " bytes of binary data");
+    display::print("Received " +std::to_string((int)data.size()) + " bytes of binary data");
 }
 
 int main() {
