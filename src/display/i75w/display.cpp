@@ -1,22 +1,20 @@
 #include "display.hpp"
-
-#include <cstring>
-
 #include "buildinfo.h"
+#include <deque>
+#include <string>
 
 using namespace pimoroni;
 
 namespace display {
-    uint8_t buffer[BUFFER_SIZE];        // Actual display buffer
-    uint8_t shadow_buffer[BUFFER_SIZE]; // Shadow framebuffer for manipulation
-    PicoGraphics_PenRGB888 graphics(WIDTH, HEIGHT, &buffer); // Draw on shadow_buffer
+    uint8_t buffer[BUFFER_SIZE];
+    PicoGraphics_PenRGB888 graphics(WIDTH, HEIGHT, &buffer);
     Hub75 hub75(WIDTH, HEIGHT, nullptr, PANEL_GENERIC, false, Hub75::COLOR_ORDER::RGB);
 
     const int FONT_HEIGHT = 8;
     const std::string FONT = "bitmap8";
+    const int MAX_LINES = HEIGHT / FONT_HEIGHT;
 
-    static int cursor_x = 0;
-    static int cursor_y = 0; // Start at the top-left corner
+    static std::deque<char> text_buffer; // Store characters dynamically
 
     void __isr dma_complete() {
         hub75.dma_complete();
@@ -24,7 +22,7 @@ namespace display {
 
     void init() {
         hub75.start(dma_complete);
-        info(std::to_string(WIDTH) + "x" + std::to_string(HEIGHT) + BOARD_NAME + "\n" + PICO_PLATFORM + "\n" + BUILD_NUMBER);
+        print(std::to_string(WIDTH) + "x" + std::to_string(HEIGHT) + " - " + BOARD_NAME + "\n" + PICO_PLATFORM + "\n" + BUILD_NUMBER);
     }
 
     void clear() {
@@ -33,69 +31,80 @@ namespace display {
         graphics.set_pen(255, 255, 255);
     }
 
-    void info(std::string_view text) {
-        clear();
-        graphics.set_font(FONT);
-        graphics.text(text, Point(0, 0), WIDTH, 1);
-        update();
-    }
-
     void update() {
-        // Copy shadow buffer into actual display buffer
-        memcpy(buffer, shadow_buffer, BUFFER_SIZE);
         hub75.update(&graphics);
     }
 
-    void scroll_up() {
-        // Move all pixels up by FONT_HEIGHT rows in shadow_buffer
-        for (int y = 0; y < HEIGHT - FONT_HEIGHT; ++y) {
-            for (int x = 0; x < WIDTH; ++x) {
-                int from_index = ((y + FONT_HEIGHT) * WIDTH + x) * 3;  // RGB888 format
-                int to_index = (y * WIDTH + x) * 3;
-                shadow_buffer[to_index] = shadow_buffer[from_index];      // R
-                shadow_buffer[to_index + 1] = shadow_buffer[from_index + 1]; // G
-                shadow_buffer[to_index + 2] = shadow_buffer[from_index + 2]; // B
+    void scroll() {
+        // Remove characters up to and including the first '\n' if buffer exceeds max lines
+        int line_count = 0;
+        for (char c : text_buffer) {
+            if (c == '\n') {
+                line_count++;
             }
         }
 
-        // Clear only the last FONT_HEIGHT rows in shadow_buffer
-        for (int y = HEIGHT - FONT_HEIGHT; y < HEIGHT; ++y) {
-            for (int x = 0; x < WIDTH; ++x) {
-                int index = (y * WIDTH + x) * 3;
-                shadow_buffer[index] = 0;     // R
-                shadow_buffer[index + 1] = 0; // G
-                shadow_buffer[index + 2] = 0; // B
+        if (line_count >= MAX_LINES) {
+            while (!text_buffer.empty()) {
+                char c = text_buffer.front();
+                text_buffer.pop_front();
+                if (c == '\n') break;
             }
         }
-
-        cursor_y -= FONT_HEIGHT;
     }
 
-    void print(std::string_view text, bool append = false) {
+    void redraw() {
+        std::string text_output(text_buffer.begin(), text_buffer.end());
+        info(text_output);
+    }
+
+    void info(std::string text) {
+        clear();
+        graphics.set_font(FONT);
+
+        int line_number = 0;
+        size_t start = 0;
+        size_t end = 0;
+        while ((end = text.find('\n', start)) != std::string::npos) {
+            graphics.text(text.substr(start, end - start), Point(0, FONT_HEIGHT * line_number), WIDTH, 1, 0, 1, false);
+            start = end + 1;
+            line_number++;
+        }
+
+
+        // Print last line (or if no newline was found)
+        if (start < text.size()) {
+            graphics.text(text.substr(start), Point(0, FONT_HEIGHT * line_number), WIDTH, 1, 0, 1, false);
+        }
+
+        update();
+    }
+
+    void print(std::string text, bool append) {
+
+        std::string temp_line = "";
+
         graphics.set_pen(255, 255, 255);
         graphics.set_font(FONT);
 
-        if (!append) text = std::string(text) + '\n'; // Auto append newline if not appending
+        if (!append) text = text + "\n"; // Ensure new prints start on a new line
 
         for (char c : text) {
-            int char_width = graphics.measure_text(std::string(1, c), 1); // Get exact character width
+            // Measure width of current line
 
-            // Move to a new line when necessary
-            if (c == '\n' || cursor_x + char_width >= WIDTH) {
-                cursor_x = 0;
-                cursor_y += FONT_HEIGHT;
+            int current_width = graphics.measure_text(temp_line + c, 1, 1, false);
+            int char_width = graphics.measure_text(std::string(1, c), 1, 1, false);
 
-                // Scroll up only if at the bottom
-                if (cursor_y + FONT_HEIGHT > HEIGHT) {
-                    scroll_up();
-                    cursor_y -= FONT_HEIGHT;
-                }
-                if (c == '\n') continue;
+            if (current_width + char_width >= WIDTH) {
+                text_buffer.push_back('\n'); // Insert newline if line is full
+                temp_line = "";
+                redraw();
             }
 
-            graphics.text(std::string(1, c), Point(cursor_x, cursor_y), WIDTH, 1);
-            cursor_x += char_width; // Move cursor by measured width
+            scroll();
+
+            text_buffer.push_back(c);
         }
-        update();
+        redraw();
     }
 }

@@ -12,7 +12,7 @@ namespace display {
     void init();
     void update();
     void clear();
-    void info(std::string_view text);
-    void print(std::string_view text, bool append = false);
+    void info(std::string text);
+    void print(std::string text, bool append = false);
     extern uint8_t buffer[BUFFER_SIZE];
 }
