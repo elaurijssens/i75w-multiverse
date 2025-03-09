@@ -104,6 +104,11 @@ std::string KVStore::getParam(const std::string& key) {
 }
 
 // Store a string value with a binary key
+bool KVStore::setParam(const std::string& key, const std::string& value) {
+    return setParam(reinterpret_cast<const uint8_t*>(key.c_str()), key.length(), reinterpret_cast<const uint8_t*>(value.c_str()), value.length());
+}
+
+// Store a string value with a binary key
 bool KVStore::setParam(const uint8_t* key, size_t keyLength, const std::string& value) {
     return setParam(key, keyLength, reinterpret_cast<const uint8_t*>(value.c_str()), value.length());
 }

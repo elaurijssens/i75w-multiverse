@@ -24,6 +24,7 @@ public:
     std::string getParam(const uint8_t* key, size_t keyLength);
     bool getParam(const uint8_t* key, size_t keyLength, uint8_t* buffer, size_t bufferSize);
 
+    bool setParam(const std::string& key, const std::string& value);
     bool setParam(const uint8_t* key, size_t keyLength, const std::string& value);
     bool setParam(const uint8_t* key, size_t keyLength, const uint8_t* data, size_t length);
 

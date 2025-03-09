@@ -150,7 +150,8 @@ int main() {
     std::unordered_map<std::string, std::string> defaults = {
         {"ssid", "MyNetwork"},
         {"pass", "DefaultPass"},
-        {"port", "8080"}
+        {"port", "8080"},
+        {"wifi_auth", "16777220"}
     };
 
     KVStore kvStore(defaults);
@@ -160,7 +161,7 @@ int main() {
 
     display::init();
 
-    TcpServer server(kvStore.getParam("ssid"), kvStore.getParam("pass"),std::stoi(kvStore.getParam("port")));
+    TcpServer server(kvStore);
 
     if (!server.start()) {
         display::print("Failed to start TCP server");

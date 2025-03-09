@@ -32,13 +32,13 @@ def send_image(image_path, command, host='192.168.14.49', port=12345):
             s.connect((host, port))
 
             # Prepare header
-            header = b"Multiverse:" + struct.pack('!I', data_size) + command.encode('utf-8')
+            header = b"multiverse:" + struct.pack('!I', data_size << 2) + command.encode('utf-8')
 
             # Send header first
             s.sendall(header)
 
             # Send the raw pixel data
-            s.sendall(raw_data)
+            s.sendall(raw_data[:32769])
 
             print(f"Image '{image_path}' ({width}x{height}, {data_size} bytes) sent successfully with command '{command}' to {host}:{port}")
 

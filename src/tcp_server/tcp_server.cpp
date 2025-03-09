@@ -1,6 +1,5 @@
 #include "tcp_server.hpp"
-#include <utility>
-#include <cstring>  // For memcmp
+#include <cstring>
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 #include "pico/bootrom.h"
@@ -15,12 +14,17 @@ struct RecvState {
     bool receiving_data = false;
     std::string command;
     std::vector<uint8_t> header_buffer;
+    std::vector<uint8_t> recv_buffer;  // ✅ Reassembly buffer
 };
 
 RecvState recv_state;
 
-TcpServer::TcpServer(const std::string& ssid, const std::string& password, uint16_t port)
-    : ssid{ssid}, password{password}, port{port}, server_pcb{nullptr} {}
+TcpServer::TcpServer(KVStore& kvStore)
+    : kvStore{kvStore}, server_pcb{nullptr} {
+    ssid = kvStore.getParam("ssid");
+    password = kvStore.getParam("pass");
+    port = std::stoi(kvStore.getParam("port"));
+}
 
 TcpServer::~TcpServer() {
     stop();
@@ -52,7 +56,6 @@ std::string TcpServer::ipv4addr() {
 
 std::string TcpServer::ipv6addr() {
     std::string ipv6_addresses;
-
     for (int i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
         if (netif_list->ip6_addr_state[i]) {
             if (!ipv6_addresses.empty()) {
@@ -62,7 +65,6 @@ std::string TcpServer::ipv6addr() {
             ipv6_addresses += std::string(ipaddr_ntoa(ip));
         }
     }
-
     return ipv6_addresses.empty() ? "No IPv6 address assigned" : ipv6_addresses;
 }
 
@@ -79,6 +81,10 @@ bool TcpServer::connect_wifi() {
     cyw43_arch_enable_sta_mode();
     display::print("Connecting to Wi-Fi: " + ssid);
 
+    // Retrieve last successful auth mode from kvStore (default to WPA2 AES if not found)
+    std::string stored_auth_mode_str = kvStore.getParam("wifi_auth");
+    uint32_t stored_auth_mode = std::stoi(stored_auth_mode_str);
+
     constexpr uint32_t auth_modes[] = {
         CYW43_AUTH_WPA3_SAE_AES_PSK,
         CYW43_AUTH_WPA3_WPA2_AES_PSK,
@@ -86,9 +92,26 @@ bool TcpServer::connect_wifi() {
         CYW43_AUTH_WPA2_AES_PSK
     };
 
+    // Try stored auth mode first
+    if (std::find(std::begin(auth_modes), std::end(auth_modes), stored_auth_mode) != std::end(auth_modes)) {
+        display::print("Trying stored auth mode: " + std::to_string(stored_auth_mode));
+        if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), stored_auth_mode, 5000) == 0) {
+            return true;
+        }
+    }
+
+    // If stored mode fails, try all modes in order
     for (int retry = 1; retry < 4; retry++) {
         for (uint32_t auth_mode : auth_modes) {
+            if (auth_mode == stored_auth_mode) continue; // Skip stored mode (already tried)
+
             if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), auth_mode, 2000 * retry) == 0) {
+                // ✅ If auth mode is different from stored, update kvStore
+                {
+                    kvStore.setParam("wifi_auth", std::to_string(auth_mode));
+                    kvStore.commitToFlash();
+                    display::print("Updated auth mode: " + std::to_string(auth_mode));
+                }
                 return true;
             }
         }
@@ -134,22 +157,24 @@ err_t TcpServer::on_accept(void* arg, struct tcp_pcb* newpcb, err_t err) {
         return ERR_VAL;
     }
 
-    TcpServer* server = static_cast<TcpServer*>(arg);
+    auto* server = static_cast<TcpServer*>(arg);  // ✅ Retrieve TcpServer instance
     display::print("Client connected");
 
-    tcp_arg(newpcb, server);
-    tcp_recv(newpcb, on_receive);
-    tcp_err(newpcb, on_error);
+    tcp_arg(newpcb, server);  // ✅ Store server instance in the connection
+    tcp_recv(newpcb, TcpServer::on_receive);
+    tcp_err(newpcb, TcpServer::on_error);
 
     return ERR_OK;
 }
 
+#define MAX_BUFFER_SIZE (65 * 1024)  // ✅ Prevents memory overflow
+
 err_t TcpServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err_t err) {
-    TcpServer* server = static_cast<TcpServer*>(arg);
+    auto* server = static_cast<TcpServer*>(arg);
 
     if (!p) {
         display::print("Client disconnected");
-        reset_recv_state();
+        server->reset_recv_state();
         tcp_close(tpcb);
         return ERR_OK;
     }
@@ -158,48 +183,67 @@ err_t TcpServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
     uint8_t* payload = static_cast<uint8_t*>(p->payload);
     pbuf_free(p);
 
+    size_t offset = 0;  // ✅ Use an explicit offset instead of modifying the pointer
+
     if (!recv_state.receiving_data) {
-        if (!process_header(payload, data_len)) {
+        if (!server->process_header(server, payload, data_len)) {
             return ERR_OK;
         }
-        payload += 19;
-        data_len -= 19;
+        offset = HEADER_SIZE;  // ✅ Move offset forward instead of modifying `payload`
+    }
+
+    if (recv_state.command == "get:" || recv_state.command == "set:" || recv_state.command == "del:") {
+        recv_state.header_buffer.insert(recv_state.header_buffer.end(), payload + offset, payload + data_len);
+
+        if (recv_state.header_buffer.size() >= recv_state.expected_size) {
+            server->process_key_value_command(server);
+            recv_state.receiving_data = false;
+        }
+
+        return ERR_OK;
     }
 
     if (recv_state.receiving_data) {
-        process_data(payload, data_len);
+        server->process_data(payload + offset, data_len - offset);
     }
 
     return ERR_OK;
 }
 
-bool TcpServer::process_header(uint8_t* payload, size_t data_len) {
+bool TcpServer::process_header(TcpServer* server, uint8_t* payload, size_t data_len) {
     recv_state.header_buffer.insert(recv_state.header_buffer.end(), payload, payload + data_len);
 
-    if (recv_state.header_buffer.size() < 19) {
-        return false;  // Wait until we have at least 19 bytes for the full header
+    if (recv_state.header_buffer.size() < HEADER_SIZE) {
+        return false;
     }
 
     uint8_t* header_data = recv_state.header_buffer.data();
-    std::string header_prefix(reinterpret_cast<char*>(header_data), 11);
+    std::string header_prefix(reinterpret_cast<char*>(header_data), PREFIX_LENGTH);
 
-    if (header_prefix != "multiverse:") {
+    if (header_prefix != MESSAGE_PREFIX) {
         display::print("Invalid message prefix: " + header_prefix);
         recv_state.header_buffer.clear();
         return false;
     }
 
-    recv_state.expected_size = (header_data[11] << 24) | (header_data[12] << 16) |
-                               (header_data[13] << 8) | header_data[14];
+    recv_state.expected_size = (header_data[PREFIX_LENGTH] << 24) |
+                                  (header_data[PREFIX_LENGTH + 1] << 16) |
+                                  (header_data[PREFIX_LENGTH + 2] << 8) |
+                                  header_data[PREFIX_LENGTH + 3];
 
-    recv_state.command = std::string(reinterpret_cast<char*>(header_data + 15), 4);
+    recv_state.command = std::string(reinterpret_cast<char*>(header_data + PREFIX_LENGTH + 4), 4);
     recv_state.received_size = 0;
     recv_state.receiving_data = (recv_state.command == "data" || recv_state.command == "datw");
 
     display::print("Received command: " + recv_state.command);
     recv_state.header_buffer.clear();
 
-    if (recv_state.command == "_rst") {
+    if (recv_state.command == "get:" || recv_state.command == "set:" || recv_state.command == "del:") {
+        recv_state.receiving_data = true;
+        return true;  // Indicate that more data is expected
+    }
+
+     if (recv_state.command == "_rst") {
         display::print("Resetting...");
         sleep_ms(500);
         save_and_disable_interrupts();
@@ -227,17 +271,9 @@ bool TcpServer::process_header(uint8_t* payload, size_t data_len) {
     } else if (recv_state.command == "ipv6") {
         display::print(ipv6addr());
         return false;
-    } else if (recv_state.command == "get:") {
-        display::print("Retrieving value from key-value store...");
-        return false;
-    } else if (recv_state.command == "set:") {
-        display::print("Setting value in key-value store...");
-        return false;
-    } else if (recv_state.command == "del:") {
-        display::print("Deleting value from key-value store...");
-        return false;
     } else if (recv_state.command == "stor") {
         display::print("Storing key-value store...");
+        server->kvStore.commitToFlash();
         return false;
     }
 
@@ -245,7 +281,9 @@ bool TcpServer::process_header(uint8_t* payload, size_t data_len) {
 }
 
 void TcpServer::process_data(uint8_t* payload, size_t data_len) {
-    size_t copy_size = std::min(data_len, display::BUFFER_SIZE - recv_state.received_size);
+    size_t copy_size = std::min(data_len, display::BUFFER_SIZE );
+
+    display::print("Processing data bytes:" + std::to_string(copy_size));
 
     if (copy_size > 0) {
         std::memcpy(display::buffer + recv_state.received_size, payload, copy_size);
@@ -260,6 +298,31 @@ void TcpServer::process_data(uint8_t* payload, size_t data_len) {
             display::print("Image received (waiting for sync)");
         }
         reset_recv_state();
+    }
+}
+
+void TcpServer::process_key_value_command(TcpServer* server) {
+    std::string data(reinterpret_cast<char*>(recv_state.header_buffer.data()), recv_state.header_buffer.size());
+    display::print("Received: '" + data + "'");
+
+    size_t delimiter = data.find(':');
+    if (delimiter == std::string::npos) {
+        display::print("Malformed key-value command");
+        return;
+    }
+
+    std::string key = data.substr(0, delimiter);
+    std::string value = data.substr(delimiter + 1);
+
+    if (recv_state.command == "get:") {
+        std::string retrieved_value = server->kvStore.getParam(key);
+        display::print("Get " + key + ": " + retrieved_value);
+    } else if (recv_state.command == "set:") {
+        display::print("Set " + key + " to " + value);
+        server->kvStore.setParam(key, value);
+    } else if (recv_state.command == "del:") {
+        display::print("Deleting key: " + key);
+        server->kvStore.deleteParam(key);  // Mark as deleted
     }
 }
 
