@@ -1,6 +1,13 @@
 #include "tcp_server.hpp"
 #include <cstring>
-#include "pico/stdlib.h"
+#include <cstring>
+#define DEBUG
+#ifdef DEBUG
+#define DEBUG_PRINT(x) do { display::print(x);  } while (0)
+#else
+#define DEBUG_PRINT(x) do { } while (0)
+#endif
+
 #include "pico/cyw43_arch.h"
 #include "pico/bootrom.h"
 #include "hardware/structs/rosc.h"
@@ -32,11 +39,11 @@ TcpServer::~TcpServer() {
 
 bool TcpServer::start() {
     if (!connect_wifi()) {
-        display::print("Wi-Fi connection failed");
+        DEBUG_PRINT("Wi-Fi connection failed");
         return false;
     }
 
-    display::print("Starting TCP server...");
+    DEBUG_PRINT("Starting TCP server...");
     run();
     return true;
 }
@@ -45,7 +52,7 @@ void TcpServer::stop() {
     if (server_pcb) {
         tcp_close(server_pcb);
         server_pcb = nullptr;
-        display::print("TCP server stopped");
+        DEBUG_PRINT("TCP server stopped");
     }
 }
 
@@ -73,6 +80,7 @@ std::string TcpServer::ipv6addr() {
 // }
 
 bool TcpServer::connect_wifi() {
+    DEBUG_PRINT("Attempting to connect to Wi-Fi...");
     if (cyw43_arch_init()) {
         display::print("Failed to initialize Wi-Fi module");
         return false;
@@ -126,26 +134,26 @@ void TcpServer::run() {
     server_pcb = tcp_new();
 
     if (!server_pcb) {
-        display::print("Failed to create TCP server PCB");
+        DEBUG_PRINT("Failed to create TCP server PCB");
         cyw43_arch_lwip_end();
         return;
     }
 
     err_t err = tcp_bind(server_pcb, IP_ADDR_ANY, port);
     if (err != ERR_OK) {
-        display::print("Failed to bind TCP server to port " + std::to_string(port));
+        DEBUG_PRINT("Failed to bind TCP server to port " + std::to_string(port));
         cyw43_arch_lwip_end();
         return;
     }
 
     server_pcb = tcp_listen_with_backlog(server_pcb, 1);
     if (!server_pcb) {
-        display::print("Failed to listen on TCP server");
+        DEBUG_PRINT("Failed to listen on TCP server");
         cyw43_arch_lwip_end();
         return;
     }
 
-    display::print("TCP server listening on port " + std::to_string(port));
+    DEBUG_PRINT("TCP server listening on port " + std::to_string(port));
     tcp_arg(server_pcb, this);
     tcp_accept(server_pcb, on_accept);
     cyw43_arch_lwip_end();
@@ -153,12 +161,12 @@ void TcpServer::run() {
 
 err_t TcpServer::on_accept(void* arg, struct tcp_pcb* newpcb, err_t err) {
     if (err != ERR_OK || !newpcb) {
-        display::print("TCP accept error");
+        DEBUG_PRINT("TCP accept error");
         return ERR_VAL;
     }
 
     auto* server = static_cast<TcpServer*>(arg);  // ✅ Retrieve TcpServer instance
-    display::print("Client connected");
+    DEBUG_PRINT("Client connected");
 
     tcp_arg(newpcb, server);  // ✅ Store server instance in the connection
     tcp_recv(newpcb, TcpServer::on_receive);
@@ -173,7 +181,7 @@ err_t TcpServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
     auto* server = static_cast<TcpServer*>(arg);
 
     if (!p) {
-        display::print("Client disconnected");
+        DEBUG_PRINT("Client disconnected");
         server->reset_recv_state();
         tcp_close(tpcb);
         return ERR_OK;
@@ -183,28 +191,33 @@ err_t TcpServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
     uint8_t* payload = static_cast<uint8_t*>(p->payload);
     pbuf_free(p);
 
-    size_t offset = 0;  // ✅ Use an explicit offset instead of modifying the pointer
+    size_t offset = 0;  // ✅ Use an explicit offset instead of modifying payload
 
     if (!recv_state.receiving_data) {
         if (!server->process_header(server, payload, data_len)) {
             return ERR_OK;
         }
-        offset = HEADER_SIZE;  // ✅ Move offset forward instead of modifying `payload`
+        offset = HEADER_SIZE;  // ✅ Move past header
     }
 
-    if (recv_state.command == "get:" || recv_state.command == "set:" || recv_state.command == "del:") {
-        recv_state.header_buffer.insert(recv_state.header_buffer.end(), payload + offset, payload + data_len);
-
-        if (recv_state.header_buffer.size() >= recv_state.expected_size) {
-            server->process_key_value_command(server);
-            recv_state.receiving_data = false;
-        }
-
-        return ERR_OK;
+    // ✅ Prevent buffer overflow
+    if (recv_state.recv_buffer.size() + (data_len - offset) > MAX_BUFFER_SIZE) {
+        DEBUG_PRINT("Error: Buffer overflow detected, dropping data.");
+        recv_state.recv_buffer.clear();
+        return ERR_MEM;
     }
 
-    if (recv_state.receiving_data) {
-        server->process_data(payload + offset, data_len - offset);
+    // ✅ Store data in reassembly buffer
+    recv_state.recv_buffer.insert(recv_state.recv_buffer.end(), payload + offset, payload + data_len);
+
+    tcp_recved(tpcb, data_len);  // ✅ Acknowledge full data received
+
+    // ✅ Only process when full message is received
+
+    DEBUG_PRINT("Buffer: "+ std::to_string(recv_state.recv_buffer.size())+"  Expected: " + std::to_string( recv_state.expected_size));
+    if (recv_state.recv_buffer.size() >= recv_state.expected_size) {
+        server->process_data();
+        recv_state.receiving_data = false;
     }
 
     return ERR_OK;
@@ -259,11 +272,11 @@ bool TcpServer::process_header(TcpServer* server, uint8_t* payload, size_t data_
         return false;
     } else if (recv_state.command == "clsc") {
         display::clearscreen();
-        display::print("Cleared display");
+        DEBUG_PRINT("Cleared display");
         return false;
     } else if (recv_state.command == "sync") {
         display::update();
-        display::print("Display synchronized");
+        DEBUG_PRINT("Display synchronized");
         return false;
     } else if (recv_state.command == "ipv4") {
         display::print(ipv4addr());
@@ -280,30 +293,31 @@ bool TcpServer::process_header(TcpServer* server, uint8_t* payload, size_t data_
     return recv_state.receiving_data;
 }
 
-void TcpServer::process_data(uint8_t* payload, size_t data_len) {
-    size_t copy_size = std::min(data_len, display::BUFFER_SIZE );
-
-    display::print("Processing data bytes:" + std::to_string(copy_size));
-
-    if (copy_size > 0) {
-        std::memcpy(display::buffer + recv_state.received_size, payload, copy_size);
-        recv_state.received_size += copy_size;
+void TcpServer::process_data() {
+    if (recv_state.recv_buffer.empty()) {
+        DEBUG_PRINT("Error: Received empty data buffer!");
+        return;
     }
 
-    if (recv_state.received_size >= recv_state.expected_size) {
-        if (recv_state.command == "data") {
-            display::update();
-            display::print("Image received and updated");
-        } else {
-            display::print("Image received (waiting for sync)");
-        }
-        reset_recv_state();
+    DEBUG_PRINT("Processing data bytes:" + std::to_string(recv_state.recv_buffer.size()));
+
+    size_t copy_size = std::min(recv_state.recv_buffer.size(), display::BUFFER_SIZE);
+
+    std::memcpy(display::buffer, recv_state.recv_buffer.data(), copy_size);
+
+    if (recv_state.command == "data") {
+        display::update();
+        DEBUG_PRINT("Image received and updated");
+    } else {
+        DEBUG_PRINT("Image received (waiting for sync)");
     }
+
+    recv_state.recv_buffer.clear();  // ✅ Clear buffer after processing
 }
 
 void TcpServer::process_key_value_command(TcpServer* server) {
     std::string data(reinterpret_cast<char*>(recv_state.header_buffer.data()), recv_state.header_buffer.size());
-    display::print("Received: '" + data + "'");
+    DEBUG_PRINT("Received: '" + data + "'");
 
     size_t delimiter = data.find(':');
     if (delimiter == std::string::npos) {
@@ -335,5 +349,5 @@ void TcpServer::reset_recv_state() {
 }
 
 void TcpServer::on_error(void* arg, err_t err) {
-    display::print("TCP error: " + std::to_string(err));
+    DEBUG_PRINT("TCP error: " + std::to_string(err));
 }

@@ -2,13 +2,35 @@
 #include "buildinfo.h"
 #include <deque>
 #include <string>
+#include "config_storage.hpp"
 
 using namespace pimoroni;
+
+#include <unordered_map>
+
+// ✅ Mapping of string values to Hub75::COLOR_ORDER
+Hub75::COLOR_ORDER get_color_order_from_kvStore(KVStore& kvStore) {
+    static const std::unordered_map<std::string, Hub75::COLOR_ORDER> color_order_map = {
+        {"RGB", Hub75::COLOR_ORDER::RGB},
+        {"RBG", Hub75::COLOR_ORDER::RBG},
+        {"GRB", Hub75::COLOR_ORDER::GRB},
+        {"GBR", Hub75::COLOR_ORDER::GBR},
+        {"BRG", Hub75::COLOR_ORDER::BRG},
+        {"BGR", Hub75::COLOR_ORDER::BGR}
+    };
+
+    std::string color_order_str = kvStore.getParam("color_order");  // Read from storage
+    if (color_order_map.count(color_order_str)) {
+        return color_order_map.at(color_order_str);
+    }
+
+    return Hub75::COLOR_ORDER::RGB;  // ✅ Default if invalid or missing
+}
 
 namespace display {
     uint8_t buffer[BUFFER_SIZE];
     PicoGraphics_PenRGB888 graphics(WIDTH, HEIGHT, &buffer);
-    Hub75 hub75(WIDTH, HEIGHT, nullptr, PANEL_GENERIC, false, Hub75::COLOR_ORDER::RGB);
+    Hub75* hub75 = nullptr;
 
     const int FONT_HEIGHT = 8;
     const std::string FONT = "bitmap8";
@@ -17,11 +39,32 @@ namespace display {
     static std::deque<char> text_buffer; // Store characters dynamically
 
     void __isr dma_complete() {
-        hub75.dma_complete();
+        if (hub75) hub75->dma_complete();
     }
 
-    void init() {
-        hub75.start(dma_complete);
+    void init(KVStore& kvStore) {  // ✅ Pass `kvStore` to `init`
+        if (!hub75) {
+            // ✅ Initialize `Hub75` dynamically using kvStore
+            static const std::unordered_map<std::string, Hub75::COLOR_ORDER> color_order_map = {
+                {"RGB", Hub75::COLOR_ORDER::RGB},
+                {"RBG", Hub75::COLOR_ORDER::RBG},
+                {"GRB", Hub75::COLOR_ORDER::GRB},
+                {"GBR", Hub75::COLOR_ORDER::GBR},
+                {"BRG", Hub75::COLOR_ORDER::BRG},
+                {"BGR", Hub75::COLOR_ORDER::BGR}
+            };
+
+            std::string color_order_str = kvStore.getParam("color_order");  // Read from storage
+            Hub75::COLOR_ORDER color_order = Hub75::COLOR_ORDER::RGB;  // Default
+
+            if (color_order_map.count(color_order_str)) {
+                color_order = color_order_map.at(color_order_str);
+            }
+
+            hub75 = new Hub75(WIDTH, HEIGHT, nullptr, PANEL_GENERIC, false, color_order);
+        }
+
+        hub75->start(dma_complete);
         print(std::to_string(WIDTH) + "x" + std::to_string(HEIGHT) + " - " + BOARD_NAME + "\n" + PICO_PLATFORM + "\n" + BUILD_NUMBER);
     }
 
@@ -31,8 +74,9 @@ namespace display {
         graphics.set_pen(255, 255, 255);
     }
 
+
     void update() {
-        hub75.update(&graphics);
+        if (hub75) hub75->update(&graphics);
     }
 
     void scroll() {

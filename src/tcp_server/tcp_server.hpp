@@ -41,7 +41,7 @@ private:
 
     // Private methods for handling data
     static bool process_header(TcpServer* server, uint8_t* payload, size_t data_len);
-    static void process_data(uint8_t* payload, size_t data_len);
+    static void process_data();
     static void reset_recv_state();
     static void process_key_value_command(TcpServer* server);  // New method to handle `get:`, `set:`, `del:`
 };

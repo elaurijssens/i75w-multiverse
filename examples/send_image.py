@@ -10,7 +10,7 @@ def image_to_raw_pixels(image_path):
             pixels = list(img.getdata())
             raw_data = bytearray()
             for r, g, b in pixels:
-                raw_data.extend([r, g, b, 255])  # Add brightness value (255)
+                raw_data.extend([b, g, r, 255])  # Add brightness value (255)
             return raw_data, img.width, img.height
     except Exception as e:
         print(f"Error processing image '{image_path}': {e}")
@@ -32,13 +32,13 @@ def send_image(image_path, command, host='192.168.14.49', port=12345):
             s.connect((host, port))
 
             # Prepare header
-            header = b"multiverse:" + struct.pack('!I', data_size << 2) + command.encode('utf-8')
+            header = b"multiverse:" + struct.pack('!I', data_size) + command.encode('utf-8')
 
             # Send header first
             s.sendall(header)
 
             # Send the raw pixel data
-            s.sendall(raw_data[:32769])
+            s.sendall(raw_data)
 
             print(f"Image '{image_path}' ({width}x{height}, {data_size} bytes) sent successfully with command '{command}' to {host}:{port}")
 

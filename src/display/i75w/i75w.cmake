@@ -16,6 +16,7 @@ target_link_libraries(display INTERFACE
         pico_graphics
         hershey_fonts
         bitmap_fonts
+        config_storage
 
         pico_stdlib
         hardware_adc

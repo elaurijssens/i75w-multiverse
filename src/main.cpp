@@ -151,7 +151,8 @@ int main() {
         {"ssid", "MyNetwork"},
         {"pass", "DefaultPass"},
         {"port", "8080"},
-        {"wifi_auth", "16777220"}
+        {"wifi_auth", "16777220"},
+        {"color_order", "BGR"}
     };
 
     KVStore kvStore(defaults);
@@ -159,7 +160,7 @@ int main() {
     size_t actual_key_length;
     size_t actual_value_length;
 
-    display::init();
+    display::init(kvStore);
 
     TcpServer server(kvStore);
 
