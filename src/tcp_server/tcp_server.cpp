@@ -1,12 +1,7 @@
 #include "tcp_server.hpp"
 #include <cstring>
-#include <cstring>
-#define DEBUG
-#ifdef DEBUG
-#define DEBUG_PRINT(x) do { display::print(x);  } while (0)
-#else
-#define DEBUG_PRINT(x) do { } while (0)
-#endif
+
+#include "buildinfo.h"
 
 #include "pico/cyw43_arch.h"
 #include "pico/bootrom.h"
@@ -102,7 +97,7 @@ bool TcpServer::connect_wifi() {
 
     // Try stored auth mode first
     if (std::find(std::begin(auth_modes), std::end(auth_modes), stored_auth_mode) != std::end(auth_modes)) {
-        display::print("Trying stored auth mode: " + std::to_string(stored_auth_mode));
+        DEBUG_PRINT("Trying stored auth mode: " + std::to_string(stored_auth_mode));
         if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), stored_auth_mode, 5000) == 0) {
             return true;
         }
@@ -118,7 +113,7 @@ bool TcpServer::connect_wifi() {
                 {
                     kvStore.setParam("wifi_auth", std::to_string(auth_mode));
                     kvStore.commitToFlash();
-                    display::print("Updated auth mode: " + std::to_string(auth_mode));
+                    DEBUG_PRINT("Updated auth mode: " + std::to_string(auth_mode));
                 }
                 return true;
             }
@@ -212,10 +207,19 @@ err_t TcpServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
 
     tcp_recved(tpcb, data_len);  // ✅ Acknowledge full data received
 
-    // ✅ Only process when full message is received
+    // ✅ Immediately process key-value commands
+    if (recv_state.command == "get:" || recv_state.command == "set:" || recv_state.command == "del:") {
+        if (recv_state.recv_buffer.size() >= recv_state.expected_size) {
+            server->process_key_value_command(server);
+            recv_state.receiving_data = false;
+            recv_state.recv_buffer.clear();  // ✅ Clear buffer after processing
+        }
+        return ERR_OK;
+    }
 
-    DEBUG_PRINT("Buffer: "+ std::to_string(recv_state.recv_buffer.size())+"  Expected: " + std::to_string( recv_state.expected_size));
-    if (recv_state.recv_buffer.size() >= recv_state.expected_size) {
+    // ✅ Process image data only after all chunks are received
+     DEBUG_PRINT("Buffer: "+ std::to_string(recv_state.recv_buffer.size())+"  Expected: " + std::to_string( recv_state.expected_size));
+     if (recv_state.recv_buffer.size() >= recv_state.expected_size) {
         server->process_data();
         recv_state.receiving_data = false;
     }
@@ -316,8 +320,12 @@ void TcpServer::process_data() {
 }
 
 void TcpServer::process_key_value_command(TcpServer* server) {
-    std::string data(reinterpret_cast<char*>(recv_state.header_buffer.data()), recv_state.header_buffer.size());
-    DEBUG_PRINT("Received: '" + data + "'");
+    if (recv_state.recv_buffer.empty()) {
+        display::print("Error: Received empty key-value buffer!");
+        return;
+    }
+
+    std::string data(reinterpret_cast<char*>(recv_state.recv_buffer.data()), recv_state.recv_buffer.size());
 
     size_t delimiter = data.find(':');
     if (delimiter == std::string::npos) {
@@ -336,7 +344,7 @@ void TcpServer::process_key_value_command(TcpServer* server) {
         server->kvStore.setParam(key, value);
     } else if (recv_state.command == "del:") {
         display::print("Deleting key: " + key);
-        server->kvStore.deleteParam(key);  // Mark as deleted
+       server-> kvStore.deleteParam(key);
     }
 }
 

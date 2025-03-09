@@ -10,7 +10,7 @@ def image_to_raw_pixels(image_path):
             pixels = list(img.getdata())
             raw_data = bytearray()
             for r, g, b in pixels:
-                raw_data.extend([b, g, r, 255])  # Add brightness value (255)
+                raw_data.extend([r, g, b, 255])  # Add brightness value (255)
             return raw_data, img.width, img.height
     except Exception as e:
         print(f"Error processing image '{image_path}': {e}")

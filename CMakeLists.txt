@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
 
-
 set(MULTIVERSE_BOARD i75w)
 
 
@@ -101,6 +100,11 @@ execute_process(
         OUTPUT_VARIABLE BUILD_NUMBER
         OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+
+# Enable debug flag for Debug builds
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_definitions(-DDEBUG)  # Define DEBUG macro
+endif()
 
 # Configure a header file with these values
 configure_file(

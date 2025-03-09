@@ -1,31 +1,11 @@
 #include "display.hpp"
 #include "buildinfo.h"
 #include <deque>
-#include <string>
+#include <cstring>
 #include "config_storage.hpp"
-
-using namespace pimoroni;
-
 #include <unordered_map>
 
-// ✅ Mapping of string values to Hub75::COLOR_ORDER
-Hub75::COLOR_ORDER get_color_order_from_kvStore(KVStore& kvStore) {
-    static const std::unordered_map<std::string, Hub75::COLOR_ORDER> color_order_map = {
-        {"RGB", Hub75::COLOR_ORDER::RGB},
-        {"RBG", Hub75::COLOR_ORDER::RBG},
-        {"GRB", Hub75::COLOR_ORDER::GRB},
-        {"GBR", Hub75::COLOR_ORDER::GBR},
-        {"BRG", Hub75::COLOR_ORDER::BRG},
-        {"BGR", Hub75::COLOR_ORDER::BGR}
-    };
-
-    std::string color_order_str = kvStore.getParam("color_order");  // Read from storage
-    if (color_order_map.count(color_order_str)) {
-        return color_order_map.at(color_order_str);
-    }
-
-    return Hub75::COLOR_ORDER::RGB;  // ✅ Default if invalid or missing
-}
+using namespace pimoroni;
 
 namespace display {
     uint8_t buffer[BUFFER_SIZE];
@@ -55,11 +35,37 @@ namespace display {
             };
 
             std::string color_order_str = kvStore.getParam("color_order");  // Read from storage
+            DEBUG_PRINT("Color order in kv: " + color_order_str );
             Hub75::COLOR_ORDER color_order = Hub75::COLOR_ORDER::RGB;  // Default
+
+
+            // ✅ Trim spaces & newlines
+            color_order_str.erase(0, color_order_str.find_first_not_of(" \t\n\r"));
+            color_order_str.erase(color_order_str.find_last_not_of(" \t\n\r") + 1);
+
+            // ✅ Convert to uppercase
+            std::transform(color_order_str.begin(), color_order_str.end(), color_order_str.begin(), ::toupper);
+
+            // ✅ Debug prints
+            DEBUG_PRINT("Raw color_order_str: [" + color_order_str + "]");
+
+            // ✅ Force comparison check
+            for (const auto& pair : color_order_map) {
+                if (pair.first == color_order_str) {
+                    DEBUG_PRINT("✅ Matched key: " + pair.first);
+                }
+            }
 
             if (color_order_map.count(color_order_str)) {
                 color_order = color_order_map.at(color_order_str);
+                DEBUG_PRINT("Mapped color order to: " + color_order_str);
+            } else {
+                DEBUG_PRINT("Color order not found in map, using default: " + color_order_str);
             }
+
+            DEBUG_PRINT("Color order: " + std::to_string(static_cast<int>(color_order)) );
+
+
 
             hub75 = new Hub75(WIDTH, HEIGHT, nullptr, PANEL_GENERIC, false, color_order);
         }

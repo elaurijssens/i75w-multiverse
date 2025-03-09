@@ -1,6 +1,7 @@
 #include "config_storage.hpp"
 #include "hardware/flash.h"
 #include "hardware/sync.h"
+#include "buildinfo.h"
 #include <cstring>
 #include <vector>
 

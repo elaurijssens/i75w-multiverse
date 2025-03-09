@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <string>
 #include <string_view>
+#include "buildinfo.h"
 
 #include "display.hpp"
 #include "pico/bootrom.h"

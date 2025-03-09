@@ -4,4 +4,11 @@
 #define BOARD_NAME "@NAME@"
 #define BUILD_NUMBER "@BUILD_NUMBER@"
 #define PICO_PLATFORM "@PICO_PLATFORM@"
+
+#ifdef DEBUG
+#define DEBUG_PRINT(x) do { display::print(x);  } while (0)
+#else
+#define DEBUG_PRINT(x) do { } while (0)
+#endif
+
 #endif // BUILDINFO_H
