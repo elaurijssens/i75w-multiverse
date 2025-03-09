@@ -8,4 +8,6 @@ target_link_libraries(
         pico_stdlib
         display
         pico_cyw43_arch_lwip_threadsafe_background
+        zlib
+        config_storage
 )

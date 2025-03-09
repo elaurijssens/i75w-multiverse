@@ -80,6 +80,11 @@ namespace display {
         update();
     }
 
+    void clearscreen() {
+        text_buffer.clear();
+        redraw();
+    }
+
     void print(std::string text, bool append) {
 
         std::string temp_line = "";

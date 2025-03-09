@@ -11,7 +11,7 @@ namespace display {
 
     void init();
     void update();
-    void clear();
+    void clearscreen();
     void info(std::string text);
     void print(std::string text, bool append = false);
     extern uint8_t buffer[BUFFER_SIZE];

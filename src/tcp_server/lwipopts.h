@@ -1,6 +1,10 @@
 #ifndef _LWIPOPTS_H
 #define _LWIPOPTS_H
 
+#define LWIP_IGMP                   1  // ✅ Enable IGMP for IPv4 multicast
+#define LWIP_NETIF_MULTICAST         1  // ✅ Ensure netif multicast filtering is available
+#define LWIP_MULTICAST_PING          1  // ✅ Allow multicast ping
+
 #define LWIP_IPV6                    1
 #define LWIP_IPV6_NUM_ADDRESSES      4
 #define LWIP_IPV6_REASS              1

@@ -24,7 +24,7 @@ def send_file(filename, host='192.168.14.49', port=12345):
             s.connect((host, port))
 
             # Prepare header
-            header = b"Multiverse:" + struct.pack('!I', file_size) + command.encode('utf-8')
+            header = b"multiverse:" + struct.pack('!I', file_size) + command.encode('utf-8')
 
             # Send header first
             s.sendall(header)

@@ -144,10 +144,6 @@ size_t cdc_get_until(uint8_t *buffer, size_t max_len, uint8_t separator, uint8_t
     return index;
 }
 
-void handle_binary_data(const std::vector<uint8_t>& data) {
-    display::print("Received " +std::to_string((int)data.size()) + " bytes of binary data");
-}
-
 int main() {
     board_init(); // Wtf?
 
@@ -165,7 +161,6 @@ int main() {
     display::init();
 
     TcpServer server(kvStore.getParam("ssid"), kvStore.getParam("pass"),std::stoi(kvStore.getParam("port")));
-    server.set_binary_callback(handle_binary_data);
 
     if (!server.start()) {
         display::print("Failed to start TCP server");
