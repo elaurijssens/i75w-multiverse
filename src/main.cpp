@@ -35,7 +35,7 @@
 #include "hardware/watchdog.h"
 #include "pico/timeout_helper.h"
 #include "zlib.h"
-#include "tcp_server/tcp_server.hpp"
+#include "server/server.hpp"
 #include "config_storage/config_storage.hpp"
 
 #include "bsp/board.h"
@@ -167,7 +167,7 @@ int main() {
 
     matrix::init(kvStore);
 
-    TcpServer server(kvStore);
+    ApiServer server(kvStore);
 
     if (!server.start()) {
         matrix::print("Failed to start TCP server");

@@ -14,10 +14,10 @@ constexpr char MESSAGE_PREFIX[] = "multiverse:";  // ✅ Defined prefix
 constexpr size_t PREFIX_LENGTH = sizeof(MESSAGE_PREFIX) - 1;  // ✅ Exclude null terminator
 constexpr size_t HEADER_SIZE = PREFIX_LENGTH + 8;  // ✅ Includes 4-byte size + 4-char command
 
-class TcpServer {
+class ApiServer {
 public:
-    explicit TcpServer(KVStore& kvStore);
-    ~TcpServer();
+    explicit ApiServer(KVStore& kvStore);
+    ~ApiServer();
 
     bool start();
     void stop();
@@ -45,10 +45,10 @@ private:
     void run();
 
     // Private methods for handling data
-    static bool process_header(TcpServer* server, uint8_t* payload, size_t data_len);
+    static bool process_header(ApiServer* server, uint8_t* payload, size_t data_len);
     static void process_data();
     static void reset_recv_state();
-    static void process_key_value_command(TcpServer* server);  // New method to handle `get:`, `set:`, `del:`
+    static void process_key_value_command(ApiServer* server);  // New method to handle `get:`, `set:`, `del:`
     // void udp_recv(struct udp_pcb * pcb, void(TcpServer::* recv)(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port), TcpServer * tcp_server);
 
     void setup_multicast_listener();

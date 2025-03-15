@@ -1,4 +1,4 @@
-#include "tcp_server.hpp"
+#include "server.hpp"
 #include <cstring>
 
 #include "buildinfo.h"
@@ -23,7 +23,7 @@ struct RecvState {
 
 RecvState recv_state;
 
-TcpServer::TcpServer(KVStore& kvStore)
+ApiServer::ApiServer(KVStore& kvStore)
     : kvStore{kvStore}, server_pcb{nullptr} {
     ssid = kvStore.getParam("ssid");
     password = kvStore.getParam("pass");
@@ -32,11 +32,11 @@ TcpServer::TcpServer(KVStore& kvStore)
     multicast_port = std::stoi(kvStore.getParam("mcast_port")); //  Define a multicast port
 }
 
-TcpServer::~TcpServer() {
+ApiServer::~ApiServer() {
     stop();
 }
 
-bool TcpServer::start() {
+bool ApiServer::start() {
     if (!connect_wifi()) {
         DEBUG_PRINT("Wi-Fi connection failed");
         return false;
@@ -51,7 +51,7 @@ bool TcpServer::start() {
     return true;
 }
 
-void TcpServer::stop() {
+void ApiServer::stop() {
     if (server_pcb) {
         tcp_close(server_pcb);
         server_pcb = nullptr;
@@ -59,12 +59,12 @@ void TcpServer::stop() {
     }
 }
 
-std::string TcpServer::ipv4addr() {
+std::string ApiServer::ipv4addr() {
     const ip_addr* ip = &netif_list->ip_addr;
     return ipaddr_ntoa(ip);
 }
 
-std::string TcpServer::ipv6addr() {
+std::string ApiServer::ipv6addr() {
     std::string ipv6_addresses;
     for (int i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
         if (netif_list->ip6_addr_state[i]) {
@@ -78,11 +78,11 @@ std::string TcpServer::ipv6addr() {
     return ipv6_addresses.empty() ? "No IPv6 address assigned" : ipv6_addresses;
 }
 
-// void TcpServer::set_binary_callback(BinaryCallback&& callback) {
+// void ApiServer::set_binary_callback(BinaryCallback&& callback) {
 //     binary_callback = std::move(callback);
 // }
 
-bool TcpServer::connect_wifi() {
+bool ApiServer::connect_wifi() {
     DEBUG_PRINT("Attempting to connect to Wi-Fi...");
     if (cyw43_arch_init()) {
         matrix::print("Failed to initialize Wi-Fi module");
@@ -132,7 +132,7 @@ bool TcpServer::connect_wifi() {
     return false;
 }
 
-void TcpServer::run() {
+void ApiServer::run() {
     cyw43_arch_lwip_begin();
     server_pcb = tcp_new();
 
@@ -162,26 +162,26 @@ void TcpServer::run() {
     cyw43_arch_lwip_end();
 }
 
-err_t TcpServer::on_accept(void* arg, struct tcp_pcb* newpcb, err_t err) {
+err_t ApiServer::on_accept(void* arg, struct tcp_pcb* newpcb, err_t err) {
     if (err != ERR_OK || !newpcb) {
         DEBUG_PRINT("TCP accept error");
         return ERR_VAL;
     }
 
-    auto* server = static_cast<TcpServer*>(arg);  // ✅ Retrieve TcpServer instance
+    auto* server = static_cast<ApiServer*>(arg);  // ✅ Retrieve ApiServer instance
     DEBUG_PRINT("Client connected");
 
     tcp_arg(newpcb, server);  // ✅ Store server instance in the connection
-    tcp_recv(newpcb, TcpServer::on_receive);
-    tcp_err(newpcb, TcpServer::on_error);
+    tcp_recv(newpcb, ApiServer::on_receive);
+    tcp_err(newpcb, ApiServer::on_error);
 
     return ERR_OK;
 }
 
 #define MAX_BUFFER_SIZE (65 * 1024)  // ✅ Prevents memory overflow
 
-err_t TcpServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err_t err) {
-    auto* server = static_cast<TcpServer*>(arg);
+err_t ApiServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err_t err) {
+    auto* server = static_cast<ApiServer*>(arg);
 
     if (!p) {
         DEBUG_PRINT("Client disconnected");
@@ -235,7 +235,7 @@ err_t TcpServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
     return ERR_OK;
 }
 
-bool TcpServer::process_header(TcpServer* server, uint8_t* payload, size_t data_len) {
+bool ApiServer::process_header(ApiServer* server, uint8_t* payload, size_t data_len) {
     recv_state.header_buffer.insert(recv_state.header_buffer.end(), payload, payload + data_len);
 
     if (recv_state.header_buffer.size() < HEADER_SIZE) {
@@ -314,7 +314,7 @@ bool TcpServer::process_header(TcpServer* server, uint8_t* payload, size_t data_
     return recv_state.receiving_data;
 }
 
-void TcpServer::process_data() {
+void ApiServer::process_data() {
     if (recv_state.recv_buffer.empty()) {
         DEBUG_PRINT("Error: Received empty data buffer!");
         return;
@@ -350,7 +350,7 @@ void TcpServer::process_data() {
     recv_state.recv_buffer.clear();  // ✅ Clear buffer after processing
 }
 
-void TcpServer::process_key_value_command(TcpServer* server) {
+void ApiServer::process_key_value_command(ApiServer* server) {
     if (recv_state.recv_buffer.empty()) {
         matrix::print("Error: Received empty key-value buffer!");
         return;
@@ -379,7 +379,7 @@ void TcpServer::process_key_value_command(TcpServer* server) {
     }
 }
 
-void TcpServer::reset_recv_state() {
+void ApiServer::reset_recv_state() {
     recv_state.receiving_data = false;
     recv_state.expected_size = 0;
     recv_state.received_size = 0;
@@ -387,13 +387,13 @@ void TcpServer::reset_recv_state() {
     recv_state.header_buffer.clear();
 }
 
-void TcpServer::on_error(void* arg, err_t err) {
+void ApiServer::on_error(void* arg, err_t err) {
     DEBUG_PRINT("TCP error: " + std::to_string(err));
 }
 
 struct udp_pcb* udp_sync_pcb = nullptr;
 
-void TcpServer::setup_multicast_listener() {
+void ApiServer::setup_multicast_listener() {
     udp_sync_pcb = udp_new();
     if (!udp_sync_pcb) {
         matrix::print("Failed to create UDP multicast PCB");
@@ -416,16 +416,16 @@ void TcpServer::setup_multicast_listener() {
         return;
     }
 
-    udp_recv(udp_sync_pcb, &TcpServer::on_multicast_receive, this);
+    udp_recv(udp_sync_pcb, &ApiServer::on_multicast_receive, this);
 
     matrix::print("Listening for multicast sync on " + multicast_ip + ":" + std::to_string(multicast_port));
 }
 
-void TcpServer::on_multicast_receive(void* arg, struct udp_pcb* upcb, struct pbuf* p, const ip_addr_t* addr, u16_t port) {
+void ApiServer::on_multicast_receive(void* arg, struct udp_pcb* upcb, struct pbuf* p, const ip_addr_t* addr, u16_t port) {
     if (!p) return;
 
-    // ✅ Get the actual TcpServer instance from `arg`
-    TcpServer* server = static_cast<TcpServer*>(arg);
+    // ✅ Get the actual ApiServer instance from `arg`
+    ApiServer* server = static_cast<ApiServer*>(arg);
 
     DEBUG_PRINT("Received multicast data");
 

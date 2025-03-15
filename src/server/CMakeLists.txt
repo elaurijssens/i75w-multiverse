@@ -1,5 +1,5 @@
 add_library(tcp_server STATIC
-        tcp_server.cpp
+        server.cpp
         command_config.hpp
 )
 

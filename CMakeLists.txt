@@ -50,7 +50,7 @@ target_compile_definitions(
         MULTIVERSE_BOARD="${MULTIVERSE_BOARD}"
 )
 
-add_subdirectory(src/tcp_server)
+add_subdirectory(src/server)
 add_subdirectory(src/config_storage)
 add_subdirectory(src/matrix)
 
