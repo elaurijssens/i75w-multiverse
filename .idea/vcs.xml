@@ -2,6 +2,7 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmake-build-i75w-2350-debug/_deps/zlib_git-src" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/../pico-sdk" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/../pico-sdk/lib/btstack" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/../pico-sdk/lib/cyw43-driver" vcs="Git" />

@@ -2,6 +2,7 @@
 #include <cstring>
 
 #include "buildinfo.h"
+#include "command_config.hpp"
 
 #include "pico/cyw43_arch.h"
 #include "pico/bootrom.h"
@@ -9,6 +10,7 @@
 #include "hardware/watchdog.h"
 #include "display.hpp"
 #include "config_storage.hpp"
+#include "zlib.h"
 
 struct RecvState {
     size_t expected_size = 0;
@@ -238,7 +240,7 @@ bool TcpServer::process_header(TcpServer* server, uint8_t* payload, size_t data_
     std::string header_prefix(reinterpret_cast<char*>(header_data), PREFIX_LENGTH);
 
     if (header_prefix != MESSAGE_PREFIX) {
-        display::print("Invalid message prefix: " + header_prefix);
+        DEBUG_PRINT("Invalid message prefix: " + header_prefix);
         recv_state.header_buffer.clear();
         return false;
     }
@@ -249,46 +251,55 @@ bool TcpServer::process_header(TcpServer* server, uint8_t* payload, size_t data_
                                   header_data[PREFIX_LENGTH + 3];
 
     recv_state.command = std::string(reinterpret_cast<char*>(header_data + PREFIX_LENGTH + 4), 4);
-    recv_state.received_size = 0;
-    recv_state.receiving_data = (recv_state.command == "data" || recv_state.command == "datw");
 
-    display::print("Received command: " + recv_state.command);
+
+    if (CommandConfig::SUPPORTED_COMMANDS.find(recv_state.command) == CommandConfig::SUPPORTED_COMMANDS.end()) {
+        DEBUG_PRINT("Unknown command: " + recv_state.command);
+        return false;
+    }
+
+    recv_state.received_size = 0;
+    recv_state.receiving_data = (recv_state.command == CommandConfig::DATA ||
+        recv_state.command == CommandConfig::SHOWDATA) ||
+            recv_state.command == CommandConfig::ZIPPED ||
+                recv_state.command == CommandConfig::SHOWZIPPED;
+    DEBUG_PRINT("Received command: " + recv_state.command);
     recv_state.header_buffer.clear();
 
-    if (recv_state.command == "get:" || recv_state.command == "set:" || recv_state.command == "del:") {
+    if (recv_state.command == CommandConfig::GET || recv_state.command == CommandConfig::SET || recv_state.command == CommandConfig::DELETE) {
         recv_state.receiving_data = true;
         return true;  // Indicate that more data is expected
     }
 
-     if (recv_state.command == "_rst") {
+     if (recv_state.command == CommandConfig::RESET) {
         display::print("Resetting...");
         sleep_ms(500);
         save_and_disable_interrupts();
         rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
         watchdog_reboot(0, 0, 0);
         return false;
-    } else if (recv_state.command == "_usb") {
+    } else if (recv_state.command == CommandConfig::BOOTLOADER) {
         display::print("Entering BOOTSEL mode...");
         sleep_ms(500);
         save_and_disable_interrupts();
         rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
         reset_usb_boot(0, 0);
         return false;
-    } else if (recv_state.command == "clsc") {
+    } else if (recv_state.command == CommandConfig::CLEARSCREEN) {
         display::clearscreen();
         DEBUG_PRINT("Cleared display");
         return false;
-    } else if (recv_state.command == "sync") {
+    } else if (recv_state.command == CommandConfig::SYNC) {
         display::update();
         DEBUG_PRINT("Display synchronized");
         return false;
-    } else if (recv_state.command == "ipv4") {
+    } else if (recv_state.command == CommandConfig::IPV4) {
         display::print(ipv4addr());
         return false;
-    } else if (recv_state.command == "ipv6") {
+    } else if (recv_state.command == CommandConfig::IPV6) {
         display::print(ipv6addr());
         return false;
-    } else if (recv_state.command == "stor") {
+    } else if (recv_state.command == CommandConfig::WRITE) {
         display::print("Storing key-value store...");
         server->kvStore.commitToFlash();
         return false;
@@ -309,10 +320,10 @@ void TcpServer::process_data() {
 
     std::memcpy(display::buffer, recv_state.recv_buffer.data(), copy_size);
 
-    if (recv_state.command == "data") {
+    if (recv_state.command == CommandConfig::SHOWDATA) {
         display::update();
         DEBUG_PRINT("Image received and updated");
-    } else {
+    } else if (recv_state.command == CommandConfig::DATA) {
         DEBUG_PRINT("Image received (waiting for sync)");
     }
 
@@ -336,13 +347,13 @@ void TcpServer::process_key_value_command(TcpServer* server) {
     std::string key = data.substr(0, delimiter);
     std::string value = data.substr(delimiter + 1);
 
-    if (recv_state.command == "get:") {
+    if (recv_state.command == CommandConfig::GET) {
         std::string retrieved_value = server->kvStore.getParam(key);
         display::print("Get " + key + ": " + retrieved_value);
-    } else if (recv_state.command == "set:") {
+    } else if (recv_state.command ==  CommandConfig::SET) {
         display::print("Set " + key + " to " + value);
         server->kvStore.setParam(key, value);
-    } else if (recv_state.command == "del:") {
+    } else if (recv_state.command == CommandConfig::DELETE) {
         display::print("Deleting key: " + key);
        server-> kvStore.deleteParam(key);
     }

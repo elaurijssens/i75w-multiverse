@@ -41,7 +41,7 @@ tusb_desc_device_t const desc_device =
     .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
 
     .idVendor           = 0xCafe, // Pi
-    .idProduct          = 0x0200, // Picoprobe
+    .idProduct          = 0xF00d, // Picoprobe
     .bcdDevice          = 0x0100, // Version 01.00
     .iManufacturer      = 0x01,
     .iProduct           = 0x02,
@@ -105,7 +105,7 @@ uint8_t const * tud_descriptor_configuration_cb(uint8_t index)
 char const* string_desc_arr [] =
 {
   (const char[]) { 0x09, 0x04 }, // 0: is supported language is English (0x0409)
-  "Pimoroni",
+  "ESP",
   "Multiverse",
   usb_serial,
 };
