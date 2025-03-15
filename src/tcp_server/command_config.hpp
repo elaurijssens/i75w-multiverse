@@ -8,6 +8,7 @@
 namespace CommandConfig {
     constexpr char RESET[] = "RSET";
     constexpr char BOOTLOADER[] = "BOOT";
+    constexpr char DISCOVERY[] = "dscv";
     constexpr char CLEARSCREEN[] = "clsc";
     constexpr char SYNC[] = "sync";
     constexpr char IPV4[] = "ipv4";

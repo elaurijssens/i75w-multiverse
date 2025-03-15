@@ -28,6 +28,8 @@ private:
     KVStore& kvStore;  // Store reference to KVStore
     std::string ssid;
     std::string password;
+    std::string multicast_ip;
+    u16_t multicast_port;
     uint16_t port;
     tcp_pcb* server_pcb;
     std::vector<uint8_t> recv_buffer;
