@@ -5,6 +5,8 @@
 #include <vector>
 #include "lwip/tcp.h"
 #include "lwip/udp.h"
+#include "lwip/igmp.h"
+#include "lwip/ip_addr.h"
 #include "config_storage.hpp"  // Include KVStore
 #include "lwipopts.h"
 

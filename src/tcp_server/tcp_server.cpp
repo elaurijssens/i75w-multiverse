@@ -396,22 +396,29 @@ struct udp_pcb* udp_sync_pcb = nullptr;
 
 void TcpServer::setup_multicast_listener() {
     udp_sync_pcb = udp_new();
-
     if (!udp_sync_pcb) {
         display::print("Failed to create UDP multicast PCB");
         return;
     }
 
-    ip_addr_t multicast_addr;
-    ipaddr_aton(MULTICAST_IP, &multicast_addr);
+    ip4_addr_t multicast_addr;
+    ip4addr_aton(MULTICAST_IP, &multicast_addr);
 
-    err_t err = udp_bind(udp_sync_pcb, IP_ADDR_ANY, MULTICAST_PORT);
+    // ✅ Explicitly JOIN the multicast group
+    err_t err = igmp_joingroup(ip_2_ip4(IP_ADDR_ANY), &multicast_addr);
+    if (err != ERR_OK) {
+        display::print("Failed to join multicast group");
+        return;
+    }
+
+    err = udp_bind(udp_sync_pcb, IP_ADDR_ANY, MULTICAST_PORT);
     if (err != ERR_OK) {
         display::print("Failed to bind UDP multicast listener");
         return;
     }
 
     udp_recv(udp_sync_pcb, &TcpServer::on_multicast_receive, this);
+
     display::print("Listening for multicast sync on " MULTICAST_IP ":" + std::to_string(MULTICAST_PORT));
 }
 
