@@ -5,7 +5,7 @@
 #include "libraries/interstate75/interstate75.hpp"
 
 
-namespace display {
+namespace matrix {
     const int WIDTH = 256;
     const int HEIGHT = 64;
     const size_t BUFFER_SIZE = WIDTH * HEIGHT * 4;

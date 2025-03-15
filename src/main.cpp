@@ -29,7 +29,7 @@
 #include <string_view>
 #include "buildinfo.h"
 
-#include "display.hpp"
+#include "matrix.hpp"
 #include "pico/bootrom.h"
 #include "hardware/structs/rosc.h"
 #include "hardware/watchdog.h"
@@ -161,14 +161,14 @@ int main() {
     size_t actual_key_length;
     size_t actual_value_length;
 
-    display::init(kvStore);
+    matrix::init(kvStore);
 
     TcpServer server(kvStore);
 
     if (!server.start()) {
-        display::print("Failed to start TCP server");
+        matrix::print("Failed to start TCP server");
     } else {
-        display::print("TCP server started on " + server.ipv4addr() + ":" + kvStore.getParam("port"));
+        matrix::print("TCP server started on " + server.ipv4addr() + ":" + kvStore.getParam("port"));
     }
 
     usb_serial_init(); // ??
@@ -179,7 +179,7 @@ int main() {
         tud_task();
 
         if(!cdc_wait_for("multiverse:")) {
-            //display::print("mto");
+            //matrix::print("mto");
             continue; // Couldn't get 16 bytes of command
         }
 
@@ -194,15 +194,15 @@ int main() {
                 actual_value_length = cdc_get_until(config_value_buffer, CONFIG_VALUE_LEN, ':', '\\');
                 if (actual_value_length > 0) {
                     if (kvStore.setParam(config_key_buffer, actual_key_length, config_value_buffer, actual_value_length) ) {
-                        display::print("Key "+arrayToString(config_key_buffer, actual_key_length)+" set to "+kvStore.getParam(config_key_buffer, actual_key_length));
+                        matrix::print("Key "+arrayToString(config_key_buffer, actual_key_length)+" set to "+kvStore.getParam(config_key_buffer, actual_key_length));
                     } else {
-                        display::print("Failed to set key "+arrayToString(config_key_buffer, actual_key_length)+" to "+arrayToString(config_value_buffer, actual_value_length));
+                        matrix::print("Failed to set key "+arrayToString(config_key_buffer, actual_key_length)+" to "+arrayToString(config_value_buffer, actual_value_length));
                     }
                 } else {
-                    display::print("Key "+arrayToString(config_key_buffer, actual_key_length)+" received but no value");
+                    matrix::print("Key "+arrayToString(config_key_buffer, actual_key_length)+" received but no value");
                 }
             } else {
-                display::print("No valid data received");
+                matrix::print("No valid data received");
             }
             continue;
         }
@@ -210,7 +210,7 @@ int main() {
         if(command == "get:") {
             actual_key_length = cdc_get_until(config_key_buffer, CONFIG_KEY_LEN, ':', '\\');
             if (actual_key_length > 0) {
-                display::print(arrayToString(config_key_buffer, actual_key_length) + " = " + kvStore.getParam(config_key_buffer, actual_key_length) );
+                matrix::print(arrayToString(config_key_buffer, actual_key_length) + " = " + kvStore.getParam(config_key_buffer, actual_key_length) );
             }
             continue;
         }
@@ -219,36 +219,36 @@ int main() {
             actual_key_length = cdc_get_until(config_key_buffer, CONFIG_KEY_LEN, ':', '\\');
             if (actual_key_length > 0) {
                 if (kvStore.deleteParam(config_key_buffer, actual_key_length)) {
-                    display::print("Key " + arrayToString(config_key_buffer, actual_key_length) + " deleted");
+                    matrix::print("Key " + arrayToString(config_key_buffer, actual_key_length) + " deleted");
                 } else {
-                    display::print("Key " + arrayToString(config_key_buffer, actual_key_length) + " does not exist");
+                    matrix::print("Key " + arrayToString(config_key_buffer, actual_key_length) + " does not exist");
                 }
             }
             continue;
         }
 
         if(command=="ipv4") {
-            display::print(server.ipv4addr());
+            matrix::print(server.ipv4addr());
             continue;
         }
 
         if(command=="ipv6") {
-            display::print(server.ipv6addr());
+            matrix::print(server.ipv6addr());
             continue;
         }
 
         if(command=="stor") {
             if (kvStore.commitToFlash()) {
-                display::print("Config written to flash");
+                matrix::print("Config written to flash");
             } else {
-                display::print("Flash already up to date");
+                matrix::print("Flash already up to date");
             }
             continue;
         }
 
         if(command == "data") {
-            if (cdc_get_bytes(display::buffer, display::BUFFER_SIZE) == display::BUFFER_SIZE) {
-                display::update();
+            if (cdc_get_bytes(matrix::buffer, matrix::BUFFER_SIZE) == matrix::BUFFER_SIZE) {
+                matrix::update();
             }
             continue;
         }
@@ -258,12 +258,12 @@ int main() {
             uint32_t compressed_size;
             if (cdc_get_bytes((uint8_t*)&compressed_size, sizeof(compressed_size)) != sizeof(compressed_size)) {
                 // Error handling: failed to read compressed size
-                display::print("nosize");
+                matrix::print("nosize");
                 continue;
             }
 
             // Ensure compressed_size is within reasonable limits
-            const size_t MAX_COMPRESSED_SIZE = display::BUFFER_SIZE;  // Adjust based on expected maximum
+            const size_t MAX_COMPRESSED_SIZE = matrix::BUFFER_SIZE;  // Adjust based on expected maximum
             if (compressed_size > MAX_COMPRESSED_SIZE) {
                 // Error handling: compressed data too large
                 continue;
@@ -284,8 +284,8 @@ int main() {
             }
 
             // Decompress the data using zlib
-            uLongf decompressed_size = display::BUFFER_SIZE;  // Expected size of decompressed data
-            int ret = uncompress(display::buffer, &decompressed_size, compressed_data, compressed_size);
+            uLongf decompressed_size = matrix::BUFFER_SIZE;  // Expected size of decompressed data
+            int ret = uncompress(matrix::buffer, &decompressed_size, compressed_data, compressed_size);
 
             free(compressed_data);  // Free the compressed data buffer
 
@@ -296,19 +296,19 @@ int main() {
             }
 
             // Verify that the decompressed size is as expected
-            if (decompressed_size != display::BUFFER_SIZE) {
+            if (decompressed_size != matrix::BUFFER_SIZE) {
                 // Error handling: unexpected decompressed size
                 continue;
             }
 
             // Update the display with the decompressed data
-            display::update();
+            matrix::update();
 
             continue;
         }
 
         if(command == "_rst") {
-            display::print("RST");
+            matrix::print("RST");
             sleep_ms(500);
             save_and_disable_interrupts();
             rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
@@ -317,7 +317,7 @@ int main() {
         }
 
         if(command == "_usb") {
-            display::print("USB");
+            matrix::print("USB");
             sleep_ms(500);
             save_and_disable_interrupts();
             rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;

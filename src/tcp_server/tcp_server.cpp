@@ -8,7 +8,7 @@
 #include "pico/bootrom.h"
 #include "hardware/structs/rosc.h"
 #include "hardware/watchdog.h"
-#include "display.hpp"
+#include "matrix.hpp"
 #include "config_storage.hpp"
 #include "zlib.h"
 
@@ -83,12 +83,12 @@ std::string TcpServer::ipv6addr() {
 bool TcpServer::connect_wifi() {
     DEBUG_PRINT("Attempting to connect to Wi-Fi...");
     if (cyw43_arch_init()) {
-        display::print("Failed to initialize Wi-Fi module");
+        matrix::print("Failed to initialize Wi-Fi module");
         return false;
     }
 
     cyw43_arch_enable_sta_mode();
-    display::print("Connecting to Wi-Fi: " + ssid);
+    matrix::print("Connecting to Wi-Fi: " + ssid);
 
     // Retrieve last successful auth mode from kvStore (default to WPA2 AES if not found)
     std::string stored_auth_mode_str = kvStore.getParam("wifi_auth");
@@ -126,7 +126,7 @@ bool TcpServer::connect_wifi() {
         }
     }
 
-    display::print("Unable to connect to Wi-Fi");
+    matrix::print("Unable to connect to Wi-Fi");
     return false;
 }
 
@@ -276,35 +276,35 @@ bool TcpServer::process_header(TcpServer* server, uint8_t* payload, size_t data_
     }
 
      if (recv_state.command == CommandConfig::RESET) {
-        display::print("Resetting...");
+        matrix::print("Resetting...");
         sleep_ms(500);
         save_and_disable_interrupts();
         rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
         watchdog_reboot(0, 0, 0);
         return false;
     } else if (recv_state.command == CommandConfig::BOOTLOADER) {
-        display::print("Entering BOOTSEL mode...");
+        matrix::print("Entering BOOTSEL mode...");
         sleep_ms(500);
         save_and_disable_interrupts();
         rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
         reset_usb_boot(0, 0);
         return false;
     } else if (recv_state.command == CommandConfig::CLEARSCREEN) {
-        display::clearscreen();
+        matrix::clearscreen();
         DEBUG_PRINT("Cleared display");
         return false;
     } else if (recv_state.command == CommandConfig::SYNC) {
-        display::update();
+        matrix::update();
         DEBUG_PRINT("Display synchronized");
         return false;
     } else if (recv_state.command == CommandConfig::IPV4) {
-        display::print(ipv4addr());
+        matrix::print(ipv4addr());
         return false;
     } else if (recv_state.command == CommandConfig::IPV6) {
-        display::print(ipv6addr());
+        matrix::print(ipv6addr());
         return false;
     } else if (recv_state.command == CommandConfig::WRITE) {
-        display::print("Storing key-value store...");
+        matrix::print("Storing key-value store...");
         server->kvStore.commitToFlash();
         return false;
     }
@@ -322,13 +322,13 @@ void TcpServer::process_data() {
 
     if (recv_state.command == CommandConfig::DATA || recv_state.command == CommandConfig::SHOWDATA) {
         // ✅ Standard uncompressed data handling
-        size_t copy_size = std::min(recv_state.recv_buffer.size(), display::BUFFER_SIZE);
-        std::memcpy(display::buffer, recv_state.recv_buffer.data(), copy_size);
+        size_t copy_size = std::min(recv_state.recv_buffer.size(), matrix::BUFFER_SIZE);
+        std::memcpy(matrix::buffer, recv_state.recv_buffer.data(), copy_size);
 
     } else if (recv_state.command == CommandConfig::ZIPPED || recv_state.command == CommandConfig::SHOWZIPPED) {
         // ✅ Decompression handling
-        uLongf dest_len = display::BUFFER_SIZE;  // Maximum allowed decompressed size
-        int result = uncompress(display::buffer, &dest_len, recv_state.recv_buffer.data(), recv_state.recv_buffer.size());
+        uLongf dest_len = matrix::BUFFER_SIZE;  // Maximum allowed decompressed size
+        int result = uncompress(matrix::buffer, &dest_len, recv_state.recv_buffer.data(), recv_state.recv_buffer.size());
 
         if (result != Z_OK) {
             DEBUG_PRINT("Error: Decompression failed with code " + std::to_string(result));
@@ -339,7 +339,7 @@ void TcpServer::process_data() {
     }
 
     if (recv_state.command == CommandConfig::SHOWDATA || recv_state.command == CommandConfig::SHOWZIPPED) {
-        display::update();
+        matrix::update();
         DEBUG_PRINT("Image received and updated");
     } else {
         DEBUG_PRINT("Image received (waiting for sync)");
@@ -350,7 +350,7 @@ void TcpServer::process_data() {
 
 void TcpServer::process_key_value_command(TcpServer* server) {
     if (recv_state.recv_buffer.empty()) {
-        display::print("Error: Received empty key-value buffer!");
+        matrix::print("Error: Received empty key-value buffer!");
         return;
     }
 
@@ -358,7 +358,7 @@ void TcpServer::process_key_value_command(TcpServer* server) {
 
     size_t delimiter = data.find(':');
     if (delimiter == std::string::npos) {
-        display::print("Malformed key-value command");
+        matrix::print("Malformed key-value command");
         return;
     }
 
@@ -367,12 +367,12 @@ void TcpServer::process_key_value_command(TcpServer* server) {
 
     if (recv_state.command == CommandConfig::GET) {
         std::string retrieved_value = server->kvStore.getParam(key);
-        display::print("Get " + key + ": " + retrieved_value);
+        matrix::print("Get " + key + ": " + retrieved_value);
     } else if (recv_state.command ==  CommandConfig::SET) {
-        display::print("Set " + key + " to " + value);
+        matrix::print("Set " + key + " to " + value);
         server->kvStore.setParam(key, value);
     } else if (recv_state.command == CommandConfig::DELETE) {
-        display::print("Deleting key: " + key);
+        matrix::print("Deleting key: " + key);
        server-> kvStore.deleteParam(key);
     }
 }
@@ -397,7 +397,7 @@ struct udp_pcb* udp_sync_pcb = nullptr;
 void TcpServer::setup_multicast_listener() {
     udp_sync_pcb = udp_new();
     if (!udp_sync_pcb) {
-        display::print("Failed to create UDP multicast PCB");
+        matrix::print("Failed to create UDP multicast PCB");
         return;
     }
 
@@ -407,19 +407,19 @@ void TcpServer::setup_multicast_listener() {
     // ✅ Explicitly JOIN the multicast group
     err_t err = igmp_joingroup(ip_2_ip4(IP_ADDR_ANY), &multicast_addr);
     if (err != ERR_OK) {
-        display::print("Failed to join multicast group");
+        matrix::print("Failed to join multicast group");
         return;
     }
 
     err = udp_bind(udp_sync_pcb, IP_ADDR_ANY, MULTICAST_PORT);
     if (err != ERR_OK) {
-        display::print("Failed to bind UDP multicast listener");
+        matrix::print("Failed to bind UDP multicast listener");
         return;
     }
 
     udp_recv(udp_sync_pcb, &TcpServer::on_multicast_receive, this);
 
-    display::print("Listening for multicast sync on " MULTICAST_IP ":" + std::to_string(MULTICAST_PORT));
+    matrix::print("Listening for multicast sync on " MULTICAST_IP ":" + std::to_string(MULTICAST_PORT));
 }
 
 void TcpServer::on_multicast_receive(void* arg, struct udp_pcb* upcb, struct pbuf* p, const ip_addr_t* addr, u16_t port) {
@@ -434,7 +434,7 @@ void TcpServer::on_multicast_receive(void* arg, struct udp_pcb* upcb, struct pbu
     pbuf_free(p);
 
     if (received_data == "sync") {
-        display::update();
+        matrix::update();
         DEBUG_PRINT("🔄 Sync command received via multicast");
     }
 }

@@ -1,4 +1,4 @@
-#include "display.hpp"
+#include "matrix.hpp"
 #include "buildinfo.h"
 #include <deque>
 #include <cstring>
@@ -7,7 +7,7 @@
 
 using namespace pimoroni;
 
-namespace display {
+namespace matrix {
     uint8_t buffer[BUFFER_SIZE];
     PicoGraphics_PenRGB888 graphics(WIDTH, HEIGHT, &buffer);
     Hub75* hub75 = nullptr;

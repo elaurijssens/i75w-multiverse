@@ -3,9 +3,11 @@ add_library(config_storage STATIC
 )
 
 target_include_directories(config_storage PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${CMAKE_BINARY_DIR})
+
 target_link_libraries(
         config_storage
         pico_stdlib
-        display
+        matrix
         hardware_flash
 )

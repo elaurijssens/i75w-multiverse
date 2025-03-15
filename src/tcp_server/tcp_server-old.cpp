@@ -21,11 +21,11 @@ TcpServer::~TcpServer() {
 
 bool TcpServer::start() {
     if (!connect_wifi()) {
-        display::print("Wi-Fi connection failed");
+        matrix::print("Wi-Fi connection failed");
         return false;
     }
 
-    display::print("Starting TCP server...");
+    matrix::print("Starting TCP server...");
     run();
     return true;
 }
@@ -34,7 +34,7 @@ void TcpServer::stop() {
     if (server_pcb) {
         tcp_close(server_pcb);
         server_pcb = nullptr;
-        display::print("TCP server stopped");
+        matrix::print("TCP server stopped");
     }
 }
 
@@ -65,12 +65,12 @@ std::string TcpServer::ipv6addr() {
 
 bool TcpServer::connect_wifi() {
     if (cyw43_arch_init()) {
-        display::print("Failed to initialize Wi-Fi module");
+        matrix::print("Failed to initialize Wi-Fi module");
         return false;
     }
 
     cyw43_arch_enable_sta_mode();
-    display::print("Connecting to Wi-Fi: " + ssid);
+    matrix::print("Connecting to Wi-Fi: " + ssid);
 
     constexpr uint32_t auth_modes[] = {
         CYW43_AUTH_WPA3_SAE_AES_PSK,
@@ -88,7 +88,7 @@ bool TcpServer::connect_wifi() {
     }
 
 
-    display::print("Unable to connect to Wi-Fi");
+    matrix::print("Unable to connect to Wi-Fi");
     return false;
 }
 
@@ -97,26 +97,26 @@ void TcpServer::run() {
     server_pcb = tcp_new();
 
     if (!server_pcb) {
-        display::print("Failed to create TCP server PCB");
+        matrix::print("Failed to create TCP server PCB");
         cyw43_arch_lwip_end();
         return;
     }
 
     err_t err = tcp_bind(server_pcb, IP_ADDR_ANY, port);
     if (err != ERR_OK) {
-        display::print("Failed to bind TCP server to port " + std::to_string(port));
+        matrix::print("Failed to bind TCP server to port " + std::to_string(port));
         cyw43_arch_lwip_end();
         return;
     }
 
     server_pcb = tcp_listen_with_backlog(server_pcb, 1);
     if (!server_pcb) {
-        display::print("Failed to listen on TCP server");
+        matrix::print("Failed to listen on TCP server");
         cyw43_arch_lwip_end();
         return;
     }
 
-    display::print("TCP server listening on port " + std::to_string(port));
+    matrix::print("TCP server listening on port " + std::to_string(port));
     tcp_arg(server_pcb, this);
     tcp_accept(server_pcb, on_accept);
     cyw43_arch_lwip_end();
@@ -124,12 +124,12 @@ void TcpServer::run() {
 
 err_t TcpServer::on_accept(void* arg, struct tcp_pcb* newpcb, err_t err) {
     if (err != ERR_OK || !newpcb) {
-        display::print("TCP accept error");
+        matrix::print("TCP accept error");
         return ERR_VAL;
     }
 
     TcpServer* server = static_cast<TcpServer*>(arg);
-    display::print("Client connected");
+    matrix::print("Client connected");
 
     tcp_arg(newpcb, server);
     tcp_recv(newpcb, on_receive);
@@ -156,7 +156,7 @@ err_t TcpServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
     TcpServer* server = static_cast<TcpServer*>(arg);
 
     if (!p) {
-        display::print("Client disconnected");
+        matrix::print("Client disconnected");
         recv_state.receiving_data = false;
         recv_state.expected_size = 0;
         recv_state.received_size = 0;
@@ -183,7 +183,7 @@ err_t TcpServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
         std::string header_prefix(reinterpret_cast<char*>(header_data), 11);
 
         if (header_prefix != "Multiverse:") {
-            display::print("Invalid message prefix: " + header_prefix);
+            matrix::print("Invalid message prefix: " + header_prefix);
             recv_state.header_buffer.clear();
             return ERR_OK;
         }
@@ -195,72 +195,72 @@ err_t TcpServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
         recv_state.received_size = 0;
         recv_state.receiving_data = (recv_state.command == "data" || recv_state.command == "datw");
 
-        display::print("Received command: " + recv_state.command);
+        matrix::print("Received command: " + recv_state.command);
 
         recv_state.header_buffer.clear();  // ✅ Clear buffer since header is processed
 
         // Handle specific commands
         if (recv_state.command == "_rst") {
-            display::print("Resetting...");
+            matrix::print("Resetting...");
             sleep_ms(500);
             save_and_disable_interrupts();
             rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
             watchdog_reboot(0, 0, 0);
             return ERR_OK;
         } else if (recv_state.command == "_usb") {
-            display::print("Entering BOOTSEL mode...");
+            matrix::print("Entering BOOTSEL mode...");
             sleep_ms(500);
             save_and_disable_interrupts();
             rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
             reset_usb_boot(0, 0);
             return ERR_OK;
         } else if (recv_state.command == "_cls") {
-            display::clear();
-            display::print("Cleared display");
+            matrix::clear();
+            matrix::print("Cleared display");
             return ERR_OK;
         } else if (recv_state.command == "stor") {
-            display::print("Storing key-value store...");
+            matrix::print("Storing key-value store...");
             return ERR_OK;
         } else if (recv_state.command == "sync") {
-            display::update();
+            matrix::update();
             return ERR_OK;
         } else if (recv_state.command == "ipv4") {
-            display::print(ipv4addr());
+            matrix::print(ipv4addr());
             return ERR_OK;
         } else if (recv_state.command == "ipv6") {
-            display::print(ipv6addr());
+            matrix::print(ipv6addr());
             return ERR_OK;
         } else if (recv_state.command == "data" || recv_state.command == "datw") {
-            display::print("Receiving raw image data...");
+            matrix::print("Receiving raw image data...");
         } else if (recv_state.command == "zdat" || recv_state.command == "zdtw") {
-            display::print("Receiving compressed image data...");
+            matrix::print("Receiving compressed image data...");
         } else if (recv_state.command == "get:") {
-            display::print("Retrieving value from key-value store...");
+            matrix::print("Retrieving value from key-value store...");
         } else if (recv_state.command == "set:") {
-            display::print("Setting value in key-value store...");
+            matrix::print("Setting value in key-value store...");
         } else if (recv_state.command == "del:") {
-            display::print("Setting value in key-value store...");
+            matrix::print("Setting value in key-value store...");
         } else {
-            display::print("Unknown command: " + recv_state.command);
+            matrix::print("Unknown command: " + recv_state.command);
             return ERR_OK;
         }
     }
 
     // Handle incoming data (for `data`, `datw`, `zdat`, `zdtw`)
     if (recv_state.command == "data" || recv_state.command == "datw") {
-        size_t copy_size = std::min(data_len, display::BUFFER_SIZE - recv_state.received_size);
+        size_t copy_size = std::min(data_len, matrix::BUFFER_SIZE - recv_state.received_size);
 
         if (copy_size > 0) {
-            std::memcpy(display::buffer + recv_state.received_size, payload, copy_size);
+            std::memcpy(matrix::buffer + recv_state.received_size, payload, copy_size);
             recv_state.received_size += copy_size;
         }
 
         if (recv_state.received_size >= recv_state.expected_size) {
             if (recv_state.command == "data") {
-                display::update();
-                display::print("Image received and updated");
+                matrix::update();
+                matrix::print("Image received and updated");
             } else {
-                display::print("Image received (waiting for sync)");
+                matrix::print("Image received (waiting for sync)");
             }
             recv_state.receiving_data = false;
             recv_state.command.clear();
@@ -271,11 +271,11 @@ err_t TcpServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
 }
 
 void TcpServer::on_error(void* arg, err_t err) {
-    display::print("TCP error: " + std::to_string(err));
+    matrix::print("TCP error: " + std::to_string(err));
 }
 
 void TcpServer::on_close(struct tcp_pcb* tpcb) {
-    display::print("Closing connection");
+    matrix::print("Closing connection");
     tcp_close(tpcb);
 }
 
@@ -284,7 +284,7 @@ bool TcpServer::process_message() {
 
     const std::string prefix = "Multiverse:";
     if (std::memcmp(recv_buffer.data(), prefix.c_str(), prefix.size()) != 0) {
-        display::print("Invalid message prefix");
+        matrix::print("Invalid message prefix");
         recv_buffer.clear();
         return false;
     }
@@ -299,7 +299,7 @@ bool TcpServer::process_message() {
 
     std::string command(recv_buffer.begin() + 15, recv_buffer.begin() + 19);
     if (command.size() != 4) {
-        display::print("Invalid command size");
+        matrix::print("Invalid command size");
         recv_buffer.clear();
         return false;
     }
@@ -325,8 +325,8 @@ bool TcpServer::process_message() {
 
     recv_buffer.erase(recv_buffer.begin(), recv_buffer.begin() + static_cast<std::vector<uint8_t>::difference_type>(expected_message_size));
 
-    display::print("Received command: " + command);
-    display::print("Received file size: " + std::to_string(file_size));
+    matrix::print("Received command: " + command);
+    matrix::print("Received file size: " + std::to_string(file_size));
 
     return true;
 }

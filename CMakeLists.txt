@@ -15,8 +15,6 @@ set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/src/boards)
 #set(PICO_BOARD_CMAKE_DIRS ${CMAKE_CURRENT_LIST_DIR}/src/boards)
 
 set(NAME ${MULTIVERSE_BOARD}-ledmatrix)
-set(DISPLAY_PATH ${CMAKE_CURRENT_LIST_DIR}/src/display/${MULTIVERSE_BOARD}/${MULTIVERSE_BOARD}.cmake)
-set(WIFI_PATH ${CMAKE_CURRENT_LIST_DIR}/src/wifi/wifi.cmake)
 include(pimoroni_pico_import.cmake)
 include(pico_sdk_import.cmake)
 include(zlib_import.cmake)
@@ -53,16 +51,17 @@ target_compile_definitions(
         MULTIVERSE_BOARD="${MULTIVERSE_BOARD}"
 )
 
-include(${DISPLAY_PATH})
+#include(${DISPLAY_PATH})
 
 #include(${WIFI_PATH})
 
 add_subdirectory(src/tcp_server)
 add_subdirectory(src/config_storage)
+add_subdirectory(src/matrix)
 
 # Don't forget to link the libraries you need!
 target_link_libraries(${NAME}
-        display
+
         zlib
 
         pico_stdlib
@@ -75,6 +74,7 @@ target_link_libraries(${NAME}
 
         tcp_server
         config_storage
+        matrix
 )
 
 # create map/bin/hex file etc.
@@ -112,3 +112,5 @@ configure_file(
         ${CMAKE_BINARY_DIR}/buildinfo.h
         @ONLY
 )
+
+include_directories(${CMAKE_BINARY_DIR})
