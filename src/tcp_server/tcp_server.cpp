@@ -40,6 +40,10 @@ bool TcpServer::start() {
         return false;
     }
 
+    DEBUG_PRINT("Starting multicast listener...");
+
+    setup_multicast_listener();
+
     DEBUG_PRINT("Starting TCP server...");
     run();
     return true;
@@ -314,16 +318,30 @@ void TcpServer::process_data() {
         return;
     }
 
-    DEBUG_PRINT("Processing data bytes:" + std::to_string(recv_state.recv_buffer.size()));
+    DEBUG_PRINT("Processing data bytes: " + std::to_string(recv_state.recv_buffer.size()));
 
-    size_t copy_size = std::min(recv_state.recv_buffer.size(), display::BUFFER_SIZE);
+    if (recv_state.command == CommandConfig::DATA || recv_state.command == CommandConfig::SHOWDATA) {
+        // ✅ Standard uncompressed data handling
+        size_t copy_size = std::min(recv_state.recv_buffer.size(), display::BUFFER_SIZE);
+        std::memcpy(display::buffer, recv_state.recv_buffer.data(), copy_size);
 
-    std::memcpy(display::buffer, recv_state.recv_buffer.data(), copy_size);
+    } else if (recv_state.command == CommandConfig::ZIPPED || recv_state.command == CommandConfig::SHOWZIPPED) {
+        // ✅ Decompression handling
+        uLongf dest_len = display::BUFFER_SIZE;  // Maximum allowed decompressed size
+        int result = uncompress(display::buffer, &dest_len, recv_state.recv_buffer.data(), recv_state.recv_buffer.size());
 
-    if (recv_state.command == CommandConfig::SHOWDATA) {
+        if (result != Z_OK) {
+            DEBUG_PRINT("Error: Decompression failed with code " + std::to_string(result));
+            return;
+        }
+
+        DEBUG_PRINT("Decompressed size: " + std::to_string(dest_len));
+    }
+
+    if (recv_state.command == CommandConfig::SHOWDATA || recv_state.command == CommandConfig::SHOWZIPPED) {
         display::update();
         DEBUG_PRINT("Image received and updated");
-    } else if (recv_state.command == CommandConfig::DATA) {
+    } else {
         DEBUG_PRINT("Image received (waiting for sync)");
     }
 
@@ -369,4 +387,47 @@ void TcpServer::reset_recv_state() {
 
 void TcpServer::on_error(void* arg, err_t err) {
     DEBUG_PRINT("TCP error: " + std::to_string(err));
+}
+
+#define MULTICAST_IP "239.255.0.1"  // ✅ Define a multicast IP
+#define MULTICAST_PORT 4321         // ✅ Define a multicast port
+
+struct udp_pcb* udp_sync_pcb = nullptr;
+
+void TcpServer::setup_multicast_listener() {
+    udp_sync_pcb = udp_new();
+
+    if (!udp_sync_pcb) {
+        display::print("Failed to create UDP multicast PCB");
+        return;
+    }
+
+    ip_addr_t multicast_addr;
+    ipaddr_aton(MULTICAST_IP, &multicast_addr);
+
+    err_t err = udp_bind(udp_sync_pcb, IP_ADDR_ANY, MULTICAST_PORT);
+    if (err != ERR_OK) {
+        display::print("Failed to bind UDP multicast listener");
+        return;
+    }
+
+    udp_recv(udp_sync_pcb, &TcpServer::on_multicast_receive, this);
+    display::print("Listening for multicast sync on " MULTICAST_IP ":" + std::to_string(MULTICAST_PORT));
+}
+
+void TcpServer::on_multicast_receive(void* arg, struct udp_pcb* upcb, struct pbuf* p, const ip_addr_t* addr, u16_t port) {
+
+    DEBUG_PRINT("Entered on_multicast_receive");
+
+    if (!p) return;
+
+    DEBUG_PRINT("Received multicast data");
+
+    std::string received_data(static_cast<char*>(p->payload), p->len);
+    pbuf_free(p);
+
+    if (received_data == "sync") {
+        display::update();
+        DEBUG_PRINT("🔄 Sync command received via multicast");
+    }
 }

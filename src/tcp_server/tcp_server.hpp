@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include "lwip/tcp.h"
+#include "lwip/udp.h"
 #include "config_storage.hpp"  // Include KVStore
 #include "lwipopts.h"
 
@@ -44,6 +45,10 @@ private:
     static void process_data();
     static void reset_recv_state();
     static void process_key_value_command(TcpServer* server);  // New method to handle `get:`, `set:`, `del:`
+    // void udp_recv(struct udp_pcb * pcb, void(TcpServer::* recv)(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port), TcpServer * tcp_server);
+
+    void setup_multicast_listener();
+    static void on_multicast_receive(void* arg, struct udp_pcb* upcb, struct pbuf* p, const ip_addr_t* addr, u16_t port);
 };
 
 #endif // TCP_SERVER_HPP
