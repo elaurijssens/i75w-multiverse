@@ -28,6 +28,8 @@ TcpServer::TcpServer(KVStore& kvStore)
     ssid = kvStore.getParam("ssid");
     password = kvStore.getParam("pass");
     port = std::stoi(kvStore.getParam("port"));
+    multicast_ip =  kvStore.getParam("mcast_ip"); //  Define a multicast IP
+    multicast_port = std::stoi(kvStore.getParam("mcast_port")); //  Define a multicast port
 }
 
 TcpServer::~TcpServer() {
@@ -389,9 +391,6 @@ void TcpServer::on_error(void* arg, err_t err) {
     DEBUG_PRINT("TCP error: " + std::to_string(err));
 }
 
-#define MULTICAST_IP "239.255.0.1"  // ✅ Define a multicast IP
-#define MULTICAST_PORT 4321         // ✅ Define a multicast port
-
 struct udp_pcb* udp_sync_pcb = nullptr;
 
 void TcpServer::setup_multicast_listener() {
@@ -402,7 +401,7 @@ void TcpServer::setup_multicast_listener() {
     }
 
     ip4_addr_t multicast_addr;
-    ip4addr_aton(MULTICAST_IP, &multicast_addr);
+    ip4addr_aton(multicast_ip.c_str(), &multicast_addr);
 
     // ✅ Explicitly JOIN the multicast group
     err_t err = igmp_joingroup(ip_2_ip4(IP_ADDR_ANY), &multicast_addr);
@@ -411,7 +410,7 @@ void TcpServer::setup_multicast_listener() {
         return;
     }
 
-    err = udp_bind(udp_sync_pcb, IP_ADDR_ANY, MULTICAST_PORT);
+    err = udp_bind(udp_sync_pcb, IP_ADDR_ANY, multicast_port);
     if (err != ERR_OK) {
         matrix::print("Failed to bind UDP multicast listener");
         return;
@@ -419,22 +418,51 @@ void TcpServer::setup_multicast_listener() {
 
     udp_recv(udp_sync_pcb, &TcpServer::on_multicast_receive, this);
 
-    matrix::print("Listening for multicast sync on " MULTICAST_IP ":" + std::to_string(MULTICAST_PORT));
+    matrix::print("Listening for multicast sync on " + multicast_ip + ":" + std::to_string(multicast_port));
 }
 
 void TcpServer::on_multicast_receive(void* arg, struct udp_pcb* upcb, struct pbuf* p, const ip_addr_t* addr, u16_t port) {
-
-    DEBUG_PRINT("Entered on_multicast_receive");
-
     if (!p) return;
+
+    // ✅ Get the actual TcpServer instance from `arg`
+    TcpServer* server = static_cast<TcpServer*>(arg);
 
     DEBUG_PRINT("Received multicast data");
 
     std::string received_data(static_cast<char*>(p->payload), p->len);
     pbuf_free(p);
 
-    if (received_data == "sync") {
+    if (received_data == CommandConfig::SYNC) {
         matrix::update();
-        DEBUG_PRINT("🔄 Sync command received via multicast");
+        DEBUG_PRINT("Sync command received via multicast");
+    } else if (received_data == CommandConfig::DISCOVERY) {  // ✅ New discovery feature
+        matrix::print("Discovery request received");
+
+        // ✅ Access kvStore via `server->kvStore`
+        std::string response = R"({ "width": )" + std::to_string(matrix::WIDTH) + R"(, )" +
+            R"("height": )" + std::to_string(matrix::HEIGHT) + R"(, )" +
+                R"("rotation": )" + server->kvStore.getParam("rotation") + R"(, )" +
+                    R"("order": )" + server->kvStore.getParam("order") + R"(, )" +
+                        R"("ip_address": ")" + server->ipv4addr() + R"(", )" +
+                            R"("port": )" + server->kvStore.getParam("port") + R"(, )" +
+                                R"("build": ")" + BUILD_NUMBER + R"(" })";
+
+        pbuf* response_pbuf = pbuf_alloc(PBUF_TRANSPORT, response.size(), PBUF_RAM);
+        if (!response_pbuf) {
+            DEBUG_PRINT("Failed to allocate pbuf for multicast response");
+            return;  // ✅ Avoid using a null pointer
+        }
+
+        memcpy(response_pbuf->payload, response.c_str(), response.size());
+
+        // ✅ Ensure `pbuf_free(response_pbuf)` is always called
+        err_t send_err = udp_sendto(upcb, response_pbuf, addr, port);
+        pbuf_free(response_pbuf);  // ✅ Always free the buffer
+
+        if (send_err != ERR_OK) {
+            DEBUG_PRINT("Failed to send multicast response, error: " + std::to_string(send_err));
+        }
+
+        matrix::print("Sent discovery response: " + response);
     }
 }

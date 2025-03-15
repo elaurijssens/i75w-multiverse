@@ -3,8 +3,9 @@
 
 #define BOARD_NAME "@NAME@"
 #define BUILD_NUMBER "@BUILD_NUMBER@"
+#define VERSION "@VERSION"
 #define PICO_PLATFORM "@PICO_PLATFORM@"
-
+// #define DEBUG
 #ifdef DEBUG
 #define DEBUG_PRINT(x) do { matrix::print(x);  } while (0)
 #else

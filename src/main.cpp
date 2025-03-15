@@ -151,7 +151,11 @@ int main() {
     std::unordered_map<std::string, std::string> defaults = {
         {"ssid", "MyNetwork"},
         {"pass", "DefaultPass"},
-        {"port", "8080"},
+        {"port", "54321"},
+        {"mcast_ip", "239.255.111.111"},
+        {"mcast_port", "54321"},
+        {"rotation", "0"},
+        {"order", "1"},
         {"wifi_auth", "16777220"},
         {"color_order", "BGR"}
     };
