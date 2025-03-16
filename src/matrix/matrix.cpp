@@ -85,16 +85,20 @@ namespace matrix {
         if (hub75) hub75->update(&graphics);
     }
 
-    void scroll() {
-        // Remove characters up to and including the first '\n' if buffer exceeds max lines
+    int line_count() {
         int line_count = 0;
         for (char c : text_buffer) {
             if (c == '\n') {
                 line_count++;
             }
         }
+        return line_count;
+    }
 
-        if (line_count >= MAX_LINES) {
+    void scroll() {
+        // Remove characters up to and including the first '\n' if buffer exceeds max lines
+
+        while (line_count() > MAX_LINES) {
             while (!text_buffer.empty()) {
                 char c = text_buffer.front();
                 text_buffer.pop_front();
@@ -136,29 +140,27 @@ namespace matrix {
     }
 
     void print(std::string text, bool append) {
-
         std::string temp_line = "";
 
         graphics.set_pen(255, 255, 255);
         graphics.set_font(FONT);
 
-        if (!append) text = text + "\n"; // Ensure new prints start on a new line
+        if (!append) text += "\n"; // Ensure new prints start on a new line
 
         for (char c : text) {
-            // Measure width of current line
+            std::string test_line = temp_line + c;  // ✅ Simulate adding the character
 
-            int current_width = graphics.measure_text(temp_line + c, 1, 1, false);
-            int char_width = graphics.measure_text(std::string(1, c), 1, 1, false);
+            int current_width = graphics.measure_text(test_line, 1, 1, false);
 
-            if (current_width + char_width >= WIDTH) {
-                text_buffer.push_back('\n'); // Insert newline if line is full
-                temp_line = "";
-                redraw();
+            if (current_width >= WIDTH) {
+                text_buffer.push_back('\n'); // ✅ Insert newline when overflowing
+                temp_line.clear();
             }
 
-            scroll();
-
+            temp_line += c;  // ✅ Now actually add the character
             text_buffer.push_back(c);
+
+            scroll();
         }
         redraw();
     }

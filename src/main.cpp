@@ -157,7 +157,8 @@ int main() {
         {"rotation", "0"},
         {"order", "1"},
         {"wifi_auth", "16777220"},
-        {"color_order", "BGR"}
+        {"color_order", "BGR"},
+        {"brightness", "255"}
     };
 
     KVStore kvStore(defaults);

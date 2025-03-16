@@ -1,127 +1,164 @@
-import argparse
 import socket
+import sys
 import struct
 import zlib
-import os
+from PIL import Image
 
-# Configuration
-DEFAULT_IP = "192.168.14.49"
-DEFAULT_PORT = 54321
-MULTICAST_IP = "239.255.111.111"
-MULTICAST_PORT = 54321
-HEADER_PREFIX = "multiverse:"  # ✅ Ensure this matches the server's expected format
+# Constants
+HEADER_PREFIX = b"multiverse:"
+MULTICAST_IP = "239.255.111.111"  # Default multicast address
+MULTICAST_PORT = 54321            # Default multicast port
+BUFFER_SIZE = 4096                # 4KB buffer for file transfers
+DISCOVERY_TIMEOUT = 5.0
 
-# Commands
-COMMANDS = {
-    "RSET": "RSET",
-    "BOOT": "BOOT",
-    "DSCV": "dscv",
-    "CLSC": "clsc",
-    "SYNC": "sync",
-    "IPV4": "ipv4",
-    "IPV6": "ipv6",
-    "STOR": "stor",
-    "KGET": "kget",
-    "KSET": "kset",
-    "KDEL": "kdel",
-    "SDAT": "sdat",
-    "DATA": "data",
-    "SZIP": "szip",
-    "ZIPD": "zipd",
-}
+def image_to_raw_pixels(image_path):
+    try:
+        with Image.open(image_path) as img:
+            img = img.convert('RGB')  # Ensure RGB format
+            pixels = list(img.getdata())
+            raw_data = bytearray()
+            for r, g, b in pixels:
+                raw_data.extend([r, g, b, 255])  # Add brightness value (255)
+            return raw_data, img.width, img.height
+    except Exception as e:
+        print(f"Error processing image '{image_path}': {e}")
+        return None, None, None
 
-def send_tcp_command(command, ip=DEFAULT_IP, port=DEFAULT_PORT, data=b""):
-    """Send a command with optional data over TCP."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.connect((ip, port))
+def send_tcp_command(command, data=b"", host="192.168.14.49", port=54321):
+    """
+    Sends a command over TCP.
+    If `data` is provided, it is sent as a payload after the command.
+    """
+    file_size = len(data)
 
-        # ✅ Ensure data is in bytes
-        if isinstance(data, str):
-            data = data.encode()
+    if len(command) != 4:
+        print("Error: Command must be exactly 4 characters long.")
+        return
 
-        # ✅ Construct header (Prefix + Data Length + Command)
-        header = f"{HEADER_PREFIX}{len(data):04}{command}".encode()
-        payload = header + data
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((host, port))
 
-        print(f"Sending {len(payload)} bytes: {command}")
-        sock.sendall(payload)
+            # Prepare and send header
+            header = HEADER_PREFIX + struct.pack("!I", file_size) + command.encode("utf-8")
+            s.sendall(header)
 
-def send_multicast_command(command):
-    """Send a multicast command (e.g., SYNC, DSCV)."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
-    sock.sendto(command.encode(), (MULTICAST_IP, MULTICAST_PORT))
-    sock.close()
+            # Send file data in chunks
+            if file_size > 0:
+                s.sendall(data)
 
-def receive_multicast_response():
-    """Listen for responses to the discovery request."""
+            print(f"Command '{command}' sent successfully to {host}:{port}")
+
+            s.shutdown(socket.SHUT_WR)  # Properly close the sending side
+    except socket.error as e:
+        print(f"Socket error: {e}")
+
+def send_multicast_message(command, listen_for_responses=False):
+    """
+    Sends a multicast message.
+    If `listen_for_responses=True`, waits for devices to respond.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+            sock.sendto(command.encode("utf-8"), (MULTICAST_IP, MULTICAST_PORT))
+            print(f"Multicast command '{command}' sent to {MULTICAST_IP}:{MULTICAST_PORT}")
+
+    except socket.error as e:
+        print(f"Multicast socket error: {e}")
+
+def discover_displays():
+    """ Sends a WHO_IS_THERE multicast message and collects responses """
+
+    # Create UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+
+    # Bind to listen for responses
     sock.bind(("", MULTICAST_PORT))
 
     # Join multicast group
     mreq = struct.pack("4sl", socket.inet_aton(MULTICAST_IP), socket.INADDR_ANY)
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
-    print("Listening for responses...")
-    while True:
-        data, addr = sock.recvfrom(1024)
-        print(f"Response from {addr}: {data.decode()}")
+    # Send discovery request
+    message = b"dscv"
+    sock.sendto(message, (MULTICAST_IP, MULTICAST_PORT))
+    print("📡 Sent multicast discovery request")
 
-def send_key_value_command(command, key, value=""):
-    """Send key-value operations like KGET, KSET, KDEL."""
-    payload = f"{key}:{value}".encode()
-    send_tcp_command(command, data=payload)
+    # Listen for responses
+    sock.settimeout(DISCOVERY_TIMEOUT)  # ✅ 3-second timeout for responses
+    try:
+        while True:
+            data, addr = sock.recvfrom(1024)  # ✅ Keeps listening for multiple devices
+            print(f"🎯 Found Display at {addr[0]}: {data.decode()}")
+    except socket.timeout:
+        print("⏳ Discovery complete, no more responses.")
 
-def send_image(command, filename):
-    """Send an image file as raw or compressed data."""
-    if not os.path.exists(filename):
-        print(f"Error: File {filename} not found")
-        return
+def send_file(filename, command, host="192.168.14.49", port=54321, compress=False):
+    """
+    Reads a file and sends it using the specified command.
+    If `compress=True`, the file is compressed using zlib before sending.
+    """
 
-    with open(filename, "rb") as f:
-        img_data = f.read()
+    raw_data, width, height = image_to_raw_pixels(filename)
 
-    if command in [COMMANDS["SZIP"], COMMANDS["ZIPD"]]:
-        img_data = zlib.compress(img_data)
-        print(f"Compressed image from {len(img_data)} bytes to {len(img_data)} bytes")
 
-    send_tcp_command(command, data=img_data)
-
-# Argument Parser
-parser = argparse.ArgumentParser(description="LED Matrix Command Client")
-parser.add_argument("command", choices=COMMANDS.keys(), help="Command to send")
-parser.add_argument("--ip", default=DEFAULT_IP, help="Target device IP")
-parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Target TCP port")
-parser.add_argument("--key", help="Key for KGET, KSET, KDEL")
-parser.add_argument("--value", help="Value for KSET")
-parser.add_argument("--file", help="Filename for SDAT, DATA, SZIP, ZIPD")
-
-args = parser.parse_args()
-
-# Command Execution
-if args.command in ["RSET", "BOOT", "IPV4", "IPV6", "STOR", "CLSC"]:
-    send_tcp_command(COMMANDS[args.command], args.ip, args.port)
-
-elif args.command in ["SYNC", "DSCV"]:
-    send_multicast_command(COMMANDS[args.command])
-    if args.command == "DSCV":
-        receive_multicast_response()
-
-elif args.command in ["KGET", "KDEL"]:
-    if not args.key:
-        print("Error: --key is required for KGET and KDEL")
+    if compress:
+        data = zlib.compress(raw_data, level=9)
+        print(f"Compressed file '{filename}' from {len(data)} bytes to {len(data)} bytes")
     else:
-        send_key_value_command(COMMANDS[args.command], args.key)
+        data = raw_data
+    send_tcp_command(command, data, host, port)
 
-elif args.command == "KSET":
-    if not args.key or not args.value:
-        print("Error: --key and --value are required for KSET")
-    else:
-        send_key_value_command(COMMANDS["KSET"], args.key, args.value)
+if __name__ == "__main__":
+    """
+    Command-line interface for sending commands and files to the display.
+    """
+    if len(sys.argv) < 2:
+        print("Usage:")
+        print("  python client.py <command> [args]")
+        print("\nAvailable Commands:")
+        print("  RSET, BOOT, ipv4, ipv6, stor, clsc - Sent over TCP, no arguments")
+        print("  sync, dscv - Sent over multicast (no arguments)")
+        print("  kget <key>, kdel <key> - Sent over TCP")
+        print("  kset <key> <value> - Sent over TCP")
+        print("  data <filename>, sdat <filename> - Send raw image file over TCP")
+        print("  zipd <filename>, szip <filename> - Send compressed image file over TCP")
+        sys.exit(1)
 
-elif args.command in ["SDAT", "DATA", "SZIP", "ZIPD"]:
-    if not args.file:
-        print("Error: --file is required for sending image data")
+    command = sys.argv[1]
+
+    if command in ["RSET", "BOOT", "ipv4", "ipv6", "stor", "clsc"]:
+        send_tcp_command(command)
+
+    elif command == "sync":
+        send_multicast_message(command)
+
+    elif command == "dscv":
+        discover_displays()
+
+    elif command == "kget" and len(sys.argv) == 3:
+        key = sys.argv[2]
+        send_tcp_command("kget", key.encode("utf-8"))
+
+    elif command == "kdel" and len(sys.argv) == 3:
+        key = sys.argv[2]
+        send_tcp_command("kdel", key.encode("utf-8"))
+
+    elif command == "kset" and len(sys.argv) == 4:
+        key = sys.argv[2]
+        value = sys.argv[3]
+        send_tcp_command("kset", f"{key}:{value}".encode("utf-8"))
+
+    elif command in ["data", "sdat"] and len(sys.argv) == 3:
+        filename = sys.argv[2]
+        send_file(filename, command)
+
+    elif command in ["zipd", "szip"] and len(sys.argv) == 3:
+        filename = sys.argv[2]
+        send_file(filename, command, compress=True)
+
     else:
-        send_image(COMMANDS[args.command], args.file)
+        print("Invalid command or arguments. Run `python client.py` for usage.")

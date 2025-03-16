@@ -25,11 +25,32 @@ RecvState recv_state;
 
 ApiServer::ApiServer(KVStore& kvStore)
     : kvStore{kvStore}, server_pcb{nullptr} {
+
     ssid = kvStore.getParam("ssid");
     password = kvStore.getParam("pass");
-    port = std::stoi(kvStore.getParam("port"));
-    multicast_ip =  kvStore.getParam("mcast_ip"); //  Define a multicast IP
-    multicast_port = std::stoi(kvStore.getParam("mcast_port")); //  Define a multicast port
+    multicast_ip = kvStore.getParam("mcast_ip"); // Define a multicast IP
+
+    // Helper lambda to convert string to int safely
+    auto safe_stoi = [](const std::string& str, int default_value, int min_val, int max_val) -> int {
+        if (str.empty()) return default_value;
+        int value = 0;
+        for (char c : str) {
+            if (!isdigit(c)) return default_value; // Ensure only digits are present
+        }
+        value = std::atoi(str.c_str());
+        return (value >= min_val && value <= max_val) ? value : default_value;
+    };
+
+    port = safe_stoi(kvStore.getParam("port"), 54321, 0, 65535);
+    multicast_port = safe_stoi(kvStore.getParam("mcast_port"), 54321, 0, 65535);
+    rotation = safe_stoi(kvStore.getParam("rotation"), 0, 0, 270);
+    order = safe_stoi(kvStore.getParam("order"), 1, 0, 65535);
+    brightness = safe_stoi(kvStore.getParam("brightness"), 127, 0, 255);
+
+    // Ensure rotation is only 0, 90, 180, or 270
+    if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) {
+        rotation = 0;
+    }
 }
 
 ApiServer::~ApiServer() {
@@ -216,7 +237,7 @@ err_t ApiServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
     tcp_recved(tpcb, data_len);  // ✅ Acknowledge full data received
 
     // ✅ Immediately process key-value commands
-    if (recv_state.command == "get:" || recv_state.command == "set:" || recv_state.command == "del:") {
+    if (recv_state.command == CommandConfig::GET || recv_state.command == CommandConfig::SET || recv_state.command == CommandConfig::DELETE) {
         if (recv_state.recv_buffer.size() >= recv_state.expected_size) {
             server->process_key_value_command(server);
             recv_state.receiving_data = false;
@@ -351,12 +372,17 @@ void ApiServer::process_data() {
 }
 
 void ApiServer::process_key_value_command(ApiServer* server) {
+
+    DEBUG_PRINT("Processing key-value command");
+
     if (recv_state.recv_buffer.empty()) {
         matrix::print("Error: Received empty key-value buffer!");
         return;
     }
 
     std::string data(reinterpret_cast<char*>(recv_state.recv_buffer.data()), recv_state.recv_buffer.size());
+
+    DEBUG_PRINT("Received data: " + data);
 
     size_t delimiter = data.find(':');
     if (delimiter == std::string::npos) {
@@ -441,10 +467,10 @@ void ApiServer::on_multicast_receive(void* arg, struct udp_pcb* upcb, struct pbu
         // ✅ Access kvStore via `server->kvStore`
         std::string response = R"({ "width": )" + std::to_string(matrix::WIDTH) + R"(, )" +
             R"("height": )" + std::to_string(matrix::HEIGHT) + R"(, )" +
-                R"("rotation": )" + server->kvStore.getParam("rotation") + R"(, )" +
-                    R"("order": )" + server->kvStore.getParam("order") + R"(, )" +
+                R"("rotation": )" + std::to_string(server->rotation) + R"(, )" +
+                    R"("order": )" + std::to_string(server->order) + R"(, )" +
                         R"("ip_address": ")" + server->ipv4addr() + R"(", )" +
-                            R"("port": )" + server->kvStore.getParam("port") + R"(, )" +
+                            R"("port": )" + std::to_string(server->port) + R"(, )" +
                                 R"("build": ")" + BUILD_NUMBER + R"(" })";
 
         pbuf* response_pbuf = pbuf_alloc(PBUF_TRANSPORT, response.size(), PBUF_RAM);

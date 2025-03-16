@@ -29,8 +29,11 @@ private:
     std::string ssid;
     std::string password;
     std::string multicast_ip;
-    u16_t multicast_port;
+    uint16_t multicast_port;
     uint16_t port;
+    uint16_t brightness;
+    uint16_t rotation;
+    uint16_t order;
     tcp_pcb* server_pcb;
     std::vector<uint8_t> recv_buffer;
     size_t expected_message_size = 0;
