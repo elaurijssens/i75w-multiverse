@@ -16,9 +16,22 @@
 
 std::string arrayToString(const uint8_t* data, size_t length);
 
+inline const std::unordered_map<std::string, std::string> factory_defaults = {
+    {"ssid", "MyNetwork"},
+    {"pass", "DefaultPass"},
+    {"port", "54321"},
+    {"mcast_ip", "239.255.111.111"},
+    {"mcast_port", "54321"},
+    {"rotation", "0"},
+    {"order", "1"},
+    {"wifi_auth", "16777220"},
+    {"color_order", "BGR"},
+    {"brightness", "255"}
+};
+
 class KVStore {
 public:
-    explicit KVStore(const std::unordered_map<std::string, std::string>& defaults = {});
+    explicit KVStore();
 
     std::string getParam(const std::string& key);
     std::string getParam(const uint8_t* key, size_t keyLength);
@@ -30,6 +43,8 @@ public:
 
     bool deleteParam(const std::string& key);
     bool deleteParam(const uint8_t* key, size_t keyLength);
+
+    void setFactoryDefaults();
 
     bool commitToFlash();
     void loadFromFlash();
@@ -50,7 +65,6 @@ private:
     };
 
     kv_store_t kv_store;
-    std::unordered_map<std::string, std::string> defaultValues;
 
     uint32_t calculateCRC32(const uint8_t* data, size_t length);
     bool hasChanged = false;

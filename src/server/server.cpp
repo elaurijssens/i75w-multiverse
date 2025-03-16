@@ -18,23 +18,22 @@ struct RecvState {
     bool receiving_data = false;
     std::string command;
     std::vector<uint8_t> header_buffer;
-    std::vector<uint8_t> recv_buffer;  // ✅ Reassembly buffer
+    std::vector<uint8_t> recv_buffer; // ✅ Reassembly buffer
 };
 
 RecvState recv_state;
 
-ApiServer::ApiServer(KVStore& kvStore)
+ApiServer::ApiServer(KVStore &kvStore)
     : kvStore{kvStore}, server_pcb{nullptr} {
-
     ssid = kvStore.getParam("ssid");
     password = kvStore.getParam("pass");
     multicast_ip = kvStore.getParam("mcast_ip"); // Define a multicast IP
 
     // Helper lambda to convert string to int safely
-    auto safe_stoi = [](const std::string& str, int default_value, int min_val, int max_val) -> int {
+    auto safe_stoi = [](const std::string &str, int default_value, int min_val, int max_val) -> int {
         if (str.empty()) return default_value;
         int value = 0;
-        for (char c : str) {
+        for (char c: str) {
             if (!isdigit(c)) return default_value; // Ensure only digits are present
         }
         value = std::atoi(str.c_str());
@@ -81,7 +80,7 @@ void ApiServer::stop() {
 }
 
 std::string ApiServer::ipv4addr() {
-    const ip_addr* ip = &netif_list->ip_addr;
+    const ip_addr *ip = &netif_list->ip_addr;
     return ipaddr_ntoa(ip);
 }
 
@@ -92,7 +91,7 @@ std::string ApiServer::ipv6addr() {
             if (!ipv6_addresses.empty()) {
                 ipv6_addresses += "\n";
             }
-            ip_addr* ip = &netif_list->ip6_addr[i];
+            ip_addr *ip = &netif_list->ip6_addr[i];
             ipv6_addresses += std::string(ipaddr_ntoa(ip));
         }
     }
@@ -134,7 +133,7 @@ bool ApiServer::connect_wifi() {
 
     // If stored mode fails, try all modes in order
     for (int retry = 1; retry < 4; retry++) {
-        for (uint32_t auth_mode : auth_modes) {
+        for (uint32_t auth_mode: auth_modes) {
             if (auth_mode == stored_auth_mode) continue; // Skip stored mode (already tried)
 
             if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), auth_mode, 2000 * retry) == 0) {
@@ -183,16 +182,16 @@ void ApiServer::run() {
     cyw43_arch_lwip_end();
 }
 
-err_t ApiServer::on_accept(void* arg, struct tcp_pcb* newpcb, err_t err) {
+err_t ApiServer::on_accept(void *arg, struct tcp_pcb *newpcb, err_t err) {
     if (err != ERR_OK || !newpcb) {
         DEBUG_PRINT("TCP accept error");
         return ERR_VAL;
     }
 
-    auto* server = static_cast<ApiServer*>(arg);  // ✅ Retrieve ApiServer instance
+    auto *server = static_cast<ApiServer *>(arg); // ✅ Retrieve ApiServer instance
     DEBUG_PRINT("Client connected");
 
-    tcp_arg(newpcb, server);  // ✅ Store server instance in the connection
+    tcp_arg(newpcb, server); // ✅ Store server instance in the connection
     tcp_recv(newpcb, ApiServer::on_receive);
     tcp_err(newpcb, ApiServer::on_error);
 
@@ -201,8 +200,8 @@ err_t ApiServer::on_accept(void* arg, struct tcp_pcb* newpcb, err_t err) {
 
 #define MAX_BUFFER_SIZE (65 * 1024)  // ✅ Prevents memory overflow
 
-err_t ApiServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err_t err) {
-    auto* server = static_cast<ApiServer*>(arg);
+err_t ApiServer::on_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
+    auto *server = static_cast<ApiServer *>(arg);
 
     if (!p) {
         DEBUG_PRINT("Client disconnected");
@@ -212,16 +211,16 @@ err_t ApiServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
     }
 
     size_t data_len = p->len;
-    uint8_t* payload = static_cast<uint8_t*>(p->payload);
+    uint8_t *payload = static_cast<uint8_t *>(p->payload);
     pbuf_free(p);
 
-    size_t offset = 0;  // ✅ Use an explicit offset instead of modifying payload
+    size_t offset = 0; // ✅ Use an explicit offset instead of modifying payload
 
     if (!recv_state.receiving_data) {
         if (!server->process_header(server, payload, data_len)) {
             return ERR_OK;
         }
-        offset = HEADER_SIZE;  // ✅ Move past header
+        offset = HEADER_SIZE; // ✅ Move past header
     }
 
     // ✅ Prevent buffer overflow
@@ -234,21 +233,24 @@ err_t ApiServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
     // ✅ Store data in reassembly buffer
     recv_state.recv_buffer.insert(recv_state.recv_buffer.end(), payload + offset, payload + data_len);
 
-    tcp_recved(tpcb, data_len);  // ✅ Acknowledge full data received
+    tcp_recved(tpcb, data_len); // ✅ Acknowledge full data received
 
     // ✅ Immediately process key-value commands
-    if (recv_state.command == CommandConfig::GET || recv_state.command == CommandConfig::SET || recv_state.command == CommandConfig::DELETE) {
+    if (recv_state.command == CommandConfig::GET || recv_state.command == CommandConfig::SET || recv_state.command ==
+        CommandConfig::DELETE) {
         if (recv_state.recv_buffer.size() >= recv_state.expected_size) {
             server->process_key_value_command(server);
             recv_state.receiving_data = false;
-            recv_state.recv_buffer.clear();  // ✅ Clear buffer after processing
+            recv_state.recv_buffer.clear(); // ✅ Clear buffer after processing
         }
         return ERR_OK;
     }
 
     // ✅ Process image data only after all chunks are received
-     DEBUG_PRINT("Buffer: "+ std::to_string(recv_state.recv_buffer.size())+"  Expected: " + std::to_string( recv_state.expected_size));
-     if (recv_state.recv_buffer.size() >= recv_state.expected_size) {
+    DEBUG_PRINT(
+        "Buffer: "+ std::to_string(recv_state.recv_buffer.size())+"  Expected: " + std::to_string( recv_state.
+            expected_size));
+    if (recv_state.recv_buffer.size() >= recv_state.expected_size) {
         server->process_data();
         recv_state.receiving_data = false;
     }
@@ -256,15 +258,15 @@ err_t ApiServer::on_receive(void* arg, struct tcp_pcb* tpcb, struct pbuf* p, err
     return ERR_OK;
 }
 
-bool ApiServer::process_header(ApiServer* server, uint8_t* payload, size_t data_len) {
+bool ApiServer::process_header(ApiServer *server, uint8_t *payload, size_t data_len) {
     recv_state.header_buffer.insert(recv_state.header_buffer.end(), payload, payload + data_len);
 
     if (recv_state.header_buffer.size() < HEADER_SIZE) {
         return false;
     }
 
-    uint8_t* header_data = recv_state.header_buffer.data();
-    std::string header_prefix(reinterpret_cast<char*>(header_data), PREFIX_LENGTH);
+    uint8_t *header_data = recv_state.header_buffer.data();
+    std::string header_prefix(reinterpret_cast<char *>(header_data), PREFIX_LENGTH);
 
     if (header_prefix != MESSAGE_PREFIX) {
         DEBUG_PRINT("Invalid message prefix: " + header_prefix);
@@ -273,11 +275,11 @@ bool ApiServer::process_header(ApiServer* server, uint8_t* payload, size_t data_
     }
 
     recv_state.expected_size = (header_data[PREFIX_LENGTH] << 24) |
-                                  (header_data[PREFIX_LENGTH + 1] << 16) |
-                                  (header_data[PREFIX_LENGTH + 2] << 8) |
-                                  header_data[PREFIX_LENGTH + 3];
+                               (header_data[PREFIX_LENGTH + 1] << 16) |
+                               (header_data[PREFIX_LENGTH + 2] << 8) |
+                               header_data[PREFIX_LENGTH + 3];
 
-    recv_state.command = std::string(reinterpret_cast<char*>(header_data + PREFIX_LENGTH + 4), 4);
+    recv_state.command = std::string(reinterpret_cast<char *>(header_data + PREFIX_LENGTH + 4), 4);
 
 
     if (CommandConfig::SUPPORTED_COMMANDS.find(recv_state.command) == CommandConfig::SUPPORTED_COMMANDS.end()) {
@@ -287,18 +289,21 @@ bool ApiServer::process_header(ApiServer* server, uint8_t* payload, size_t data_
 
     recv_state.received_size = 0;
     recv_state.receiving_data = (recv_state.command == CommandConfig::DATA ||
-        recv_state.command == CommandConfig::SHOWDATA) ||
-            recv_state.command == CommandConfig::ZIPPED ||
-                recv_state.command == CommandConfig::SHOWZIPPED;
+                                 recv_state.command == CommandConfig::SHOWDATA ||
+                                 recv_state.command == CommandConfig::ZIPPED ||
+                                 recv_state.command == CommandConfig::SHOWZIPPED ||
+                                 recv_state.command == CommandConfig::PRINT); // ✅ New case for `prnt`
+
     DEBUG_PRINT("Received command: " + recv_state.command);
     recv_state.header_buffer.clear();
 
-    if (recv_state.command == CommandConfig::GET || recv_state.command == CommandConfig::SET || recv_state.command == CommandConfig::DELETE) {
+    if (recv_state.command == CommandConfig::GET || recv_state.command == CommandConfig::SET || recv_state.command ==
+        CommandConfig::DELETE) {
         recv_state.receiving_data = true;
-        return true;  // Indicate that more data is expected
+        return true; // Indicate that more data is expected
     }
 
-     if (recv_state.command == CommandConfig::RESET) {
+    if (recv_state.command == CommandConfig::RESET) {
         matrix::print("Resetting...");
         sleep_ms(500);
         save_and_disable_interrupts();
@@ -311,6 +316,15 @@ bool ApiServer::process_header(ApiServer* server, uint8_t* payload, size_t data_
         save_and_disable_interrupts();
         rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
         reset_usb_boot(0, 0);
+        return false;
+    } else if (recv_state.command == CommandConfig::FACTORY_RESET) {
+        matrix::print("Factory resetting...");
+        server->kvStore.setFactoryDefaults();
+        DEBUG_PRINT("Factory reset");
+        sleep_ms(500);
+        save_and_disable_interrupts();
+        rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
+        watchdog_reboot(0, 0, 0);
         return false;
     } else if (recv_state.command == CommandConfig::CLEARSCREEN) {
         matrix::clearscreen();
@@ -347,11 +361,11 @@ void ApiServer::process_data() {
         // ✅ Standard uncompressed data handling
         size_t copy_size = std::min(recv_state.recv_buffer.size(), matrix::BUFFER_SIZE);
         std::memcpy(matrix::buffer, recv_state.recv_buffer.data(), copy_size);
-
     } else if (recv_state.command == CommandConfig::ZIPPED || recv_state.command == CommandConfig::SHOWZIPPED) {
         // ✅ Decompression handling
-        uLongf dest_len = matrix::BUFFER_SIZE;  // Maximum allowed decompressed size
-        int result = uncompress(matrix::buffer, &dest_len, recv_state.recv_buffer.data(), recv_state.recv_buffer.size());
+        uLongf dest_len = matrix::BUFFER_SIZE; // Maximum allowed decompressed size
+        int result = uncompress(matrix::buffer, &dest_len, recv_state.recv_buffer.data(),
+                                recv_state.recv_buffer.size());
 
         if (result != Z_OK) {
             DEBUG_PRINT("Error: Decompression failed with code " + std::to_string(result));
@@ -359,6 +373,31 @@ void ApiServer::process_data() {
         }
 
         DEBUG_PRINT("Decompressed size: " + std::to_string(dest_len));
+    } else if (recv_state.command == CommandConfig::PRINT) {
+        // ✅ Limit received text to 1024 characters
+        size_t copy_size = std::min(recv_state.recv_buffer.size(), static_cast<size_t>(1024));
+
+        // ✅ Convert received data to a string
+        std::string raw_message(reinterpret_cast<const char *>(recv_state.recv_buffer.data()), copy_size);
+
+        // ✅ Filter out non-printable ASCII characters
+        std::string filtered_message;
+        for (char c: raw_message) {
+            if (c >= 32 && c <= 126) {
+                // ✅ Keep only printable ASCII
+                filtered_message += c;
+            }
+        }
+
+        if (filtered_message.empty()) {
+            DEBUG_PRINT("eceived only non-printable characters, ignoring.");
+            return;
+        }
+
+        // ✅ Print the filtered message on the display
+        matrix::print(filtered_message);
+
+        DEBUG_PRINT("Displayed filtered text");
     }
 
     if (recv_state.command == CommandConfig::SHOWDATA || recv_state.command == CommandConfig::SHOWZIPPED) {
@@ -368,11 +407,10 @@ void ApiServer::process_data() {
         DEBUG_PRINT("Image received (waiting for sync)");
     }
 
-    recv_state.recv_buffer.clear();  // ✅ Clear buffer after processing
+    recv_state.recv_buffer.clear(); // ✅ Clear buffer after processing
 }
 
-void ApiServer::process_key_value_command(ApiServer* server) {
-
+void ApiServer::process_key_value_command(ApiServer *server) {
     DEBUG_PRINT("Processing key-value command");
 
     if (recv_state.recv_buffer.empty()) {
@@ -380,7 +418,7 @@ void ApiServer::process_key_value_command(ApiServer* server) {
         return;
     }
 
-    std::string data(reinterpret_cast<char*>(recv_state.recv_buffer.data()), recv_state.recv_buffer.size());
+    std::string data(reinterpret_cast<char *>(recv_state.recv_buffer.data()), recv_state.recv_buffer.size());
 
     DEBUG_PRINT("Received data: " + data);
 
@@ -396,12 +434,12 @@ void ApiServer::process_key_value_command(ApiServer* server) {
     if (recv_state.command == CommandConfig::GET) {
         std::string retrieved_value = server->kvStore.getParam(key);
         matrix::print("Get " + key + ": " + retrieved_value);
-    } else if (recv_state.command ==  CommandConfig::SET) {
+    } else if (recv_state.command == CommandConfig::SET) {
         matrix::print("Set " + key + " to " + value);
         server->kvStore.setParam(key, value);
     } else if (recv_state.command == CommandConfig::DELETE) {
         matrix::print("Deleting key: " + key);
-       server-> kvStore.deleteParam(key);
+        server->kvStore.deleteParam(key);
     }
 }
 
@@ -413,11 +451,11 @@ void ApiServer::reset_recv_state() {
     recv_state.header_buffer.clear();
 }
 
-void ApiServer::on_error(void* arg, err_t err) {
+void ApiServer::on_error(void *arg, err_t err) {
     DEBUG_PRINT("TCP error: " + std::to_string(err));
 }
 
-struct udp_pcb* udp_sync_pcb = nullptr;
+struct udp_pcb *udp_sync_pcb = nullptr;
 
 void ApiServer::setup_multicast_listener() {
     udp_sync_pcb = udp_new();
@@ -447,43 +485,45 @@ void ApiServer::setup_multicast_listener() {
     matrix::print("Listening for multicast sync on " + multicast_ip + ":" + std::to_string(multicast_port));
 }
 
-void ApiServer::on_multicast_receive(void* arg, struct udp_pcb* upcb, struct pbuf* p, const ip_addr_t* addr, u16_t port) {
+void ApiServer::on_multicast_receive(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr,
+                                     u16_t port) {
     if (!p) return;
 
     // ✅ Get the actual ApiServer instance from `arg`
-    ApiServer* server = static_cast<ApiServer*>(arg);
+    ApiServer *server = static_cast<ApiServer *>(arg);
 
     DEBUG_PRINT("Received multicast data");
 
-    std::string received_data(static_cast<char*>(p->payload), p->len);
+    std::string received_data(static_cast<char *>(p->payload), p->len);
     pbuf_free(p);
 
     if (received_data == CommandConfig::SYNC) {
         matrix::update();
         DEBUG_PRINT("Sync command received via multicast");
-    } else if (received_data == CommandConfig::DISCOVERY) {  // ✅ New discovery feature
+    } else if (received_data == CommandConfig::DISCOVERY) {
+        // ✅ New discovery feature
         matrix::print("Discovery request received");
 
         // ✅ Access kvStore via `server->kvStore`
         std::string response = R"({ "width": )" + std::to_string(matrix::WIDTH) + R"(, )" +
-            R"("height": )" + std::to_string(matrix::HEIGHT) + R"(, )" +
-                R"("rotation": )" + std::to_string(server->rotation) + R"(, )" +
-                    R"("order": )" + std::to_string(server->order) + R"(, )" +
-                        R"("ip_address": ")" + server->ipv4addr() + R"(", )" +
-                            R"("port": )" + std::to_string(server->port) + R"(, )" +
-                                R"("build": ")" + BUILD_NUMBER + R"(" })";
+                               R"("height": )" + std::to_string(matrix::HEIGHT) + R"(, )" +
+                               R"("rotation": )" + std::to_string(server->rotation) + R"(, )" +
+                               R"("order": )" + std::to_string(server->order) + R"(, )" +
+                               R"("ip_address": ")" + server->ipv4addr() + R"(", )" +
+                               R"("port": )" + std::to_string(server->port) + R"(, )" +
+                               R"("build": ")" + BUILD_NUMBER + R"(" })";
 
-        pbuf* response_pbuf = pbuf_alloc(PBUF_TRANSPORT, response.size(), PBUF_RAM);
+        pbuf *response_pbuf = pbuf_alloc(PBUF_TRANSPORT, response.size(), PBUF_RAM);
         if (!response_pbuf) {
             DEBUG_PRINT("Failed to allocate pbuf for multicast response");
-            return;  // ✅ Avoid using a null pointer
+            return; // ✅ Avoid using a null pointer
         }
 
         memcpy(response_pbuf->payload, response.c_str(), response.size());
 
         // ✅ Ensure `pbuf_free(response_pbuf)` is always called
         err_t send_err = udp_sendto(upcb, response_pbuf, addr, port);
-        pbuf_free(response_pbuf);  // ✅ Always free the buffer
+        pbuf_free(response_pbuf); // ✅ Always free the buffer
 
         if (send_err != ERR_OK) {
             DEBUG_PRINT("Failed to send multicast response, error: " + std::to_string(send_err));

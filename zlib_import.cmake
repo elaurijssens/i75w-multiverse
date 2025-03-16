@@ -1,6 +1,9 @@
 include(FetchContent)
 set(ZLIB_BUILD_SHARED OFF CACHE BOOL "Build shared libraries" FORCE)
 set(ZLIB_BUILD_STATIC ON CACHE BOOL "Build shared libraries" FORCE)
+set(ZLIB_INSTALL OFF CACHE BOOL "Build shared libraries" FORCE)
+set(ZLIB_BUILD_MINIZIP OFF CACHE BOOL "Build shared libraries" FORCE)
+set(ZLIB_BUILD_TESTING OFF CACHE BOOL "Build shared libraries" FORCE)
 
 FetchContent_Declare(
         zlib_git

@@ -10,6 +10,7 @@ namespace CommandConfig {
     constexpr char BOOTLOADER[] = "BOOT";
     constexpr char DISCOVERY[] = "dscv";
     constexpr char CLEARSCREEN[] = "clsc";
+    constexpr char PRINT[] = "text";
     constexpr char SYNC[] = "sync";
     constexpr char IPV4[] = "ipv4";
     constexpr char IPV6[] = "ipv6";
@@ -21,6 +22,9 @@ namespace CommandConfig {
     constexpr char DATA[] = "data";
     constexpr char SHOWZIPPED[] = "szip";
     constexpr char ZIPPED[] = "zipd";
+    constexpr char USB_DISCOVERY[] = "UDSC";
+    constexpr char FACTORY_RESET[] = "FACR";
+
 
     // Optional: Store as a set for validation or lookup
     const std::unordered_set<std::string> SUPPORTED_COMMANDS = {

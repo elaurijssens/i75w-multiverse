@@ -11,8 +11,7 @@ std::string arrayToString(const uint8_t* data, size_t length) {
 }
 
 // Constructor with defaults
-KVStore::KVStore(const std::unordered_map<std::string, std::string>& defaults)
-    : defaultValues(defaults) {
+KVStore::KVStore() {
     loadFromFlash();
 }
 
@@ -36,7 +35,7 @@ void KVStore::loadFromFlash() {
     }
 
     // Apply defaults if missing keys
-    for (const auto& [key, value] : defaultValues) {
+    for (const auto& [key, value] : factory_defaults) {
         if (getParam(reinterpret_cast<const uint8_t*>(key.c_str()), key.length()).empty()) {
             setParam(reinterpret_cast<const uint8_t*>(key.c_str()), key.length(), value);
         }
@@ -58,6 +57,21 @@ bool KVStore::commitToFlash() {
     hasChanged = false;
 
     return true;
+}
+
+void KVStore::setFactoryDefaults() {
+    // ✅ Reset key-value store structure
+    std::memset(&kv_store, 0, sizeof(kv_store_t));
+    kv_store.valid_flag = 0xDEADBEEF;  // ✅ Set valid flag
+    kv_store.entry_count = 0;          // ✅ Ensure empty store
+
+    // ✅ Reapply factory defaults
+    for (const auto& [key, value] : factory_defaults) {
+        setParam(reinterpret_cast<const uint8_t*>(key.c_str()), key.length(), value);
+    }
+
+    // ✅ Commit changes to flash
+    commitToFlash();
 }
 
 // CRC32 function

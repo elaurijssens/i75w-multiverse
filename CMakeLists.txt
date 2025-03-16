@@ -35,9 +35,7 @@ set(SRC_DIR ${CMAKE_CURRENT_LIST_DIR}/src)
 # Add your source files
 add_executable(${NAME}
         ${SRC_DIR}/main.cpp
-        ${SRC_DIR}/cdc_uart.cpp
-        ${SRC_DIR}/get_serial.cpp
-        ${SRC_DIR}/usb_descriptors.cpp
+
 )
 
 target_include_directories(
@@ -53,6 +51,7 @@ target_compile_definitions(
 add_subdirectory(src/server)
 add_subdirectory(src/config_storage)
 add_subdirectory(src/matrix)
+add_subdirectory(src/usb_handler)
 
 # Don't forget to link the libraries you need!
 target_link_libraries(${NAME}
@@ -62,13 +61,11 @@ target_link_libraries(${NAME}
         hardware_pio
         hardware_watchdog
 
-        tinyusb_device
-        tinyusb_board
-
         zlib
-        tcp_server
+        server
         config_storage
         matrix
+        usb_handler
 )
 
 # create map/bin/hex file etc.
